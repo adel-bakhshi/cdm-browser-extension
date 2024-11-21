@@ -38,7 +38,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     }
 
     // Send request to find if the file is supported by CDM
-    const response = await fetch("http://localhost:5000/download/check/", {
+    const response = await fetch("http://localhost:5000/cdm/download/check/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: downloadUrl }),
@@ -87,7 +87,7 @@ async function cancelDownload(downloadItem) {
 async function downloadFile(downloadUrl) {
   try {
     // Send request to download the file
-    const response = await fetch("http://localhost:5000/download/add/", {
+    const response = await fetch("http://localhost:5000/cdm/download/add/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: downloadUrl }),
