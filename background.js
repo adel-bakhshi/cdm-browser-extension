@@ -81,6 +81,7 @@ async function resumeDownload(downloadItem) {
 
 async function cancelDownload(downloadItem) {
   await chrome.downloads.cancel(downloadItem.id);
+  await chrome.downloads.erase({ id: downloadItem.id });
   console.log("Download canceled in Chrome:", downloadItem.url);
 }
 
