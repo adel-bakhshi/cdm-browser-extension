@@ -1,11 +1,22 @@
 // Create settings if not exist
-chrome.runtime.onInstalled.addListener(async () => {
+browser.runtime.onInstalled.addListener(onInstalledAction);
+
+// Check extension enable state when starting up
+browser.runtime.onStartup.addListener(onStartupAction);
+
+// Raise event when user want to download a file
+browser.downloads.onCreated.addListener(async (downloadItem) => await downloadsOnCreatedAction(downloadItem));
+
+// Toggle extension enable state
+browser.action.onClicked.addListener(actionOnClickedAction);
+
+async function onInstalledAction() {
   // Get the settings
-  const { settings } = await chrome.storage.local.get("settings");
+  const { settings } = await browser.storage.local.get("settings");
 
   // If settings not found, set default value and load settings again
   if (!settings) {
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       settings: {
         enabled: true,
       },
@@ -15,18 +26,22 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Check if the extension is enabled
   const isEnabled = await checkIsEnabled();
   // Set the action badge to the new state
-  chrome.action.setBadgeText({
-    text: isEnabled ? "" : "Off",
-  });
-});
+  await changeBadgeState(isEnabled);
+}
 
-// Raise event when user want to download a file
-chrome.downloads.onCreated.addListener(async (downloadItem) => {
+async function onStartupAction() {
+  // Check if the extension is enabled
+  const isEnabled = await checkIsEnabled();
+  // Set the action badge to the new state
+  await changeBadgeState(isEnabled);
+}
+
+async function downloadsOnCreatedAction(downloadItem) {
   // Capture the download URL
   const downloadUrl = downloadItem.url;
 
   try {
-    // First pause the download on Chrome
+    // First pause the download on FireFox
     await pauseDownload(downloadItem);
 
     // Make sure extension is enabled
@@ -57,7 +72,7 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
 
     // Log response message
     console.log(data.message ?? "An error occurred when trying to get response message.");
-    // Cancel the download in Chrome
+    // Cancel the download in FireFox
     await cancelDownload(downloadItem);
 
     // Start download file in CDM
@@ -67,24 +82,25 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     // Resume the download
     await resumeDownload(downloadItem);
   }
-});
+}
 
 async function pauseDownload(downloadItem) {
-  await chrome.downloads.pause(downloadItem.id);
+  await browser.downloads.pause(downloadItem.id);
   console.log("Download paused in Chrome:", downloadItem.url);
 }
 
 async function resumeDownload(downloadItem) {
-  await chrome.downloads.resume(downloadItem.id);
+  await browser.downloads.resume(downloadItem.id);
   console.log("Download resumed in Chrome:", downloadItem.url);
 }
 
 async function cancelDownload(downloadItem) {
-  await chrome.downloads.cancel(downloadItem.id);
-  await chrome.downloads.erase({ id: downloadItem.id });
+  await browser.downloads.cancel(downloadItem.id);
+  await browser.downloads.erase({ id: downloadItem.id });
   console.log("Download canceled in Chrome:", downloadItem.url);
 }
 
+// Download file in CDM
 async function downloadFile(downloadUrl) {
   try {
     // Send request to download the file
@@ -109,10 +125,11 @@ async function downloadFile(downloadUrl) {
   }
 }
 
+// Check extension enable state
 async function checkIsEnabled() {
   try {
     // Get the settings and check if the extension is enabled
-    const { settings } = await chrome.storage.local.get("settings");
+    const { settings } = await browser.storage.local.get("settings");
     const isEnabled = settings.enabled;
     console.log(`Extension is ${isEnabled ? "enabled" : "disabled"}`);
 
@@ -123,20 +140,25 @@ async function checkIsEnabled() {
   }
 }
 
-chrome.action.onClicked.addListener(async () => {
+async function actionOnClickedAction() {
   // Get the current state of the extension
   const isEnabled = await checkIsEnabled();
   console.log(isEnabled);
 
-  // Toggle the extension state
-  await chrome.storage.local.set({
+  // Toggle the extension enable state
+  await browser.storage.local.set({
     settings: {
       enabled: !isEnabled,
     },
   });
 
   // Set the action badge to the new state
-  await chrome.action.setBadgeText({
-    text: !isEnabled ? "" : "Off",
+  await changeBadgeState(!isEnabled);
+}
+
+// Change badge state
+async function changeBadgeState(isEnabled) {
+  await browser.action.setBadgeText({
+    text: isEnabled ? "" : "Off",
   });
-});
+}

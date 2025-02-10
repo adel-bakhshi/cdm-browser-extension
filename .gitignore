@@ -1,0 +1,5 @@
+# Ignore output file for FireFox
+firefox-extension/web-ext-artifacts
+
+# Ignore output files for Chrome
+chromium-extension.*
