@@ -32,43 +32,89 @@ function findMediaElementsAndGetSources() {
 
 // Create popup
 function createPopup() {
-  const popupHtml = `
-    <div id="cdm-popup">
-      <!-- Popup header -->
-      <div id="cdm-popup-header">
-        <!-- Logo -->
-        <span class="logo">CDM</span>
+  // Create popup
+  const popupDiv = document.createElement("div");
+  popupDiv.id = "cdm-popup";
 
-        <!-- Message -->
-        <span class="message">Media found</span>
+  // Create header
+  const popupHeaderDiv = document.createElement("div");
+  popupHeaderDiv.id = "cdm-popup-header";
 
-        <!-- Actions -->
-        <div class="actions">
-          <!-- Show/Hide menu -->
-          <button type="button" class="cdm-button" id="show-hide-cdm-menu">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-              <path
-                d="M256 0a256 256 0 1 0 0 512A256 256 0 1 0 256 0zM135 241c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l87 87 87-87c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9L273 345c-9.4 9.4-24.6 9.4-33.9 0L135 241z" />
-            </svg>
-          </button>
+  // Create logo
+  const logo = document.createElement("span");
+  logo.className = "logo";
+  logo.textContent = "CDM";
 
-          <!-- Close popup -->
-          <button type="button" class="cdm-button" id="close-cdm-popup">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-              <path
-                d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z" />
-            </svg>
-          </button>
-        </div>
-      </div>
+  // Create message
+  const message = document.createElement("span");
+  message.className = "message";
+  message.textContent = "Media found";
 
-      <!-- Popup menu -->
-      <ul id="cdm-popup-menu"></ul>
-    </div>
-  `;
+  // Create actions
+  const actions = document.createElement("div");
+  actions.className = "actions";
 
-  // Insert popup into the DOM
-  document.body.insertAdjacentHTML("beforeend", popupHtml);
+  // Create show/hide menu button
+  const showHideButton = document.createElement("button");
+  showHideButton.type = "button";
+  showHideButton.className = "cdm-button";
+  showHideButton.id = "show-hide-cdm-menu";
+
+  // Create show/hide menu SVG icon
+  const showHideSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  showHideSVG.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  showHideSVG.setAttribute("viewBox", "0 0 512 512");
+
+  const showHidePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  showHidePath.setAttribute(
+    "d",
+    "M256 0a256 256 0 1 0 0 512A256 256 0 1 0 256 0zM135 241c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l87 87 87-87c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9L273 345c-9.4 9.4-24.6 9.4-33.9 0L135 241z"
+  );
+
+  // Add icon to show/hide button
+  showHideSVG.appendChild(showHidePath);
+  showHideButton.appendChild(showHideSVG);
+
+  // Create close button
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "cdm-button";
+  closeButton.id = "close-cdm-popup";
+
+  // Create close SVG icon
+  const closeSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  closeSVG.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  closeSVG.setAttribute("viewBox", "0 0 512 512");
+
+  const closePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  closePath.setAttribute(
+    "d",
+    "M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c9.4-9.4 24.6-9.4 33.9 0l47 47 47-47c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9l-47 47 47 47c9.4 9.4 9.4 24.6 0 33.9s-24.6 9.4-33.9 0l-47-47-47 47c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9l47-47-47-47c-9.4-9.4-9.4-24.6 0-33.9z"
+  );
+
+  // Add icon to close button
+  closeSVG.appendChild(closePath);
+  closeButton.appendChild(closeSVG);
+
+  // Add show/hide button, close button to actions
+  actions.appendChild(showHideButton);
+  actions.appendChild(closeButton);
+
+  // Add logo, message, actions to header
+  popupHeaderDiv.appendChild(logo);
+  popupHeaderDiv.appendChild(message);
+  popupHeaderDiv.appendChild(actions);
+
+  // Create menu
+  const popupMenuDiv = document.createElement("ul");
+  popupMenuDiv.id = "cdm-popup-menu";
+
+  // Add header, menu to popup
+  popupDiv.appendChild(popupHeaderDiv);
+  popupDiv.appendChild(popupMenuDiv);
+
+  // Add popup to body
+  document.body.appendChild(popupDiv);
 }
 
 // Create menu items
