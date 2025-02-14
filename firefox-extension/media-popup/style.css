@@ -1,0 +1,142 @@
+@import url("https://fonts.googleapis.com/css2?family=Asap:ital,wght@0,100..900;1,100..900&display=swap");
+
+:root {
+  --main-gradient: linear-gradient(90deg, #007bff 0%, #8000ff 50%, #ff007f 100%);
+  --white-color: #fff;
+  --text-color: #222;
+  --menu-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px;
+  --default-transition: all ease 0.3s;
+  --popup-menu-item-on-hover: #f6f6f6;
+  --row-number-color: #808080;
+}
+
+#cdm-popup {
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+  font-family: "Asap", sans-serif !important;
+  color: var(--text-color) !important;
+  line-height: 16px !important;
+  direction: ltr !important;
+  display: block !important;
+  width: 300px !important;
+  max-width: 300px !important;
+  position: fixed !important;
+  top: 0 !important;
+  right: -400px !important;
+  margin: 20px !important;
+  opacity: 0 !important;
+  transition: var(--default-transition) !important;
+  z-index: 99999 !important;
+}
+
+#cdm-popup.show {
+  right: 0 !important;
+  opacity: 1 !important;
+}
+
+#cdm-popup-header {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 12px !important;
+  width: 100% !important;
+  height: 40px !important;
+  border: none !important;
+  border-radius: 20px !important;
+  background: var(--main-gradient) !important;
+}
+
+#cdm-popup-header .logo {
+  color: var(--white-color) !important;
+  font-weight: bold !important;
+}
+
+#cdm-popup-header .message {
+  color: var(--white-color) !important;
+}
+
+#cdm-popup-header .actions {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+#cdm-popup-header .actions button.cdm-button {
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--white-color) !important;
+  opacity: 1 !important;
+  transition: var(--default-transition) !important;
+}
+
+#cdm-popup-header .actions button.cdm-button:hover {
+  opacity: 0.9 !important;
+}
+
+#cdm-popup-header .actions button.cdm-button svg path {
+  width: 100% !important;
+  height: 100% !important;
+  fill: var(--white-color) !important;
+}
+
+#cdm-popup-header .actions button.reverse {
+  transform: rotate(180deg) !important;
+}
+
+#cdm-popup-menu {
+  position: absolute !important;
+  top: calc(100% + 100px) !important;
+  width: 100% !important;
+  max-height: 320px !important;
+  background-color: var(--white-color) !important;
+  border-radius: 8px !important;
+  padding: 8px 0 !important;
+  box-shadow: var(--menu-shadow) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: var(--default-transition) !important;
+  list-style: none !important;
+}
+
+#cdm-popup-menu.show {
+  top: calc(100% + 10px) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#cdm-popup-menu li {
+  padding: 10px !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  transition: var(--default-transition) !important;
+  background-color: transparent !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  align-items: flex-start !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+#cdm-popup-menu li:hover {
+  background-color: var(--popup-menu-item-on-hover) !important;
+}
+
+#cdm-popup-menu li span:not(.row-number) {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#cdm-popup-menu li span.row-number {
+  color: var(--row-number-color) !important;
+}

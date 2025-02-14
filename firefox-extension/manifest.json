@@ -5,7 +5,7 @@
   "manifest_version": 3,
   "author": "Adel Bakhshi",
   "homepage_url": "https://github.com/adel-bakhshi/cdm-browser-extension",
-  "permissions": ["downloads", "storage"],
+  "permissions": ["downloads", "downloads.shelf", "storage", "scripting"],
   "host_permissions": ["http://localhost:5000/*"],
   "icons": {
     "16": "images/icon-16.png",
@@ -20,7 +20,9 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["scripts/content.js"]
+      "exclude_matches": ["*://www.google.com/*"],
+      "css": ["media-popup/style.css"],
+      "js": ["media-popup/script.js"]
     }
   ],
   "browser_specific_settings": {

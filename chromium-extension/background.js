@@ -10,6 +10,9 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => await downloadsOn
 // Toggle extension enable state
 chrome.action.onClicked.addListener(actionOnClickedAction);
 
+// Listen to message events
+chrome.runtime.onMessage.addListener(handleMessages);
+
 async function onInstalledAction() {
   // Get the settings
   const { settings } = await chrome.storage.local.get("settings");
@@ -158,4 +161,27 @@ async function changeBadgeState(isEnabled) {
   await chrome.action.setBadgeText({
     text: isEnabled ? "" : "Off",
   });
+}
+
+async function handleMessages(message, sender, sendResponse) {
+  // Get message type
+  const type = message?.type;
+  // Handle message by type
+  switch (type) {
+    case "download_media": {
+      if (!message.url) {
+        sendResponse({ isSuccessful: false, message: "Url is not provided" });
+        return;
+      }
+
+      sendResponse({ isSuccessful: true, message: "Message received" });
+      await downloadFile(message.url);
+      break;
+    }
+
+    default: {
+      sendResponse({ isSuccessful: false, message: "Invalid message type" });
+      break;
+    }
+  }
 }
