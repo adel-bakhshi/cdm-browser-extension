@@ -6,19 +6,19 @@ let closePopupButton;
 let showHideMenuButton;
 
 // Find all video and audio elements
-function findMediaElementsAndGetSources() {
+function findMediaElements() {
   const mediaElements = document.querySelectorAll("video, audio");
 
   // Get video and audio sources
-  let sources = [];
+  const result = [];
   for (const element of mediaElements) {
     switch (element.tagName.toLowerCase()) {
       case "video":
       case "audio": {
-        sources.push(element.currentSrc);
+        result.push({ source: element.currentSrc, element: element });
         const sourceElements = element.querySelectorAll("source");
         for (const sourceElement of sourceElements) {
-          sources.push(sourceElement.src);
+          result.push({ source: sourceElement.src, element: element });
         }
 
         break;
@@ -27,7 +27,7 @@ function findMediaElementsAndGetSources() {
   }
 
   // Distinct sources
-  return sources.filter((item, index) => sources.indexOf(item) === index);
+  return result.filter((item, index) => result.indexOf(item) === index);
 }
 
 // Create popup
@@ -118,22 +118,22 @@ function createPopup() {
 }
 
 // Create menu items
-function createMenuItems(sources) {
+function createMenuItems(mediaElements) {
   // Clear menu
   popupMenu.innerHTML = "";
 
   // Create menu items
-  sources.forEach((source, index) => {
-    createMenuItem(source, index + 1);
+  mediaElements.forEach((elementData, index) => {
+    createMenuItem(elementData, index + 1);
   });
 }
 
 // Create menu item
-function createMenuItem(source, row) {
+function createMenuItem(elementData, row) {
   // Create list item
   const listItem = document.createElement("li");
-  listItem.setAttribute("data-source", source);
-  listItem.title = source;
+  listItem.setAttribute("data-source", elementData.source);
+  listItem.title = elementData.source;
   listItem.onclick = menuItemOnClick;
 
   // Create row number
@@ -143,11 +143,40 @@ function createMenuItem(source, row) {
 
   // Create row text
   const rowText = document.createElement("span");
-  rowText.textContent = getFileName(source) ?? source;
+  rowText.textContent = getFileName(elementData.source) ?? elementData.source;
+
+  // Create navigate to media element button
+  const navigateButton = document.createElement("button");
+  navigateButton.type = "button";
+  navigateButton.className = "navigate-button";
+
+  const navigateSVG = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  navigateSVG.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  navigateSVG.setAttribute("viewBox", "0 0 512 512");
+  const navigatePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  navigatePath.setAttribute(
+    "d",
+    "M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-384c13.3 0 24 10.7 24 24l0 112c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-112c0-13.3 10.7-24 24-24zM224 352a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"
+  );
+
+  // Add icon to navigate button
+  navigateSVG.appendChild(navigatePath);
+  navigateButton.appendChild(navigateSVG);
 
   // Add row number and text to list item
   listItem.appendChild(rowNumber);
   listItem.appendChild(rowText);
+  listItem.appendChild(navigateButton);
+
+  // Add event to navigate button
+  navigateButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    // Scroll to media element
+    elementData.element.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  });
 
   // Find popup menu
   const popupMenu = document.getElementById("cdm-popup-menu");
@@ -227,32 +256,43 @@ function findElements() {
 
   // Show/Hide menu
   showHideMenuButton.addEventListener("click", function () {
-    popupMenu.classList.toggle("show");
-    this.classList.toggle("reverse");
+    if (popupMenu.classList.contains("show")) {
+      this.classList.remove("reverse");
+      popupMenu.classList.remove("show");
+      setTimeout(() => popup.classList.remove("expand"), 300);
+    } else {
+      this.classList.add("reverse");
+      popup.classList.add("expand");
+      setTimeout(() => popupMenu.classList.add("show"), 300);
+    }
   });
 }
 
 // Initialize popup
 function initializePopup() {
-  // Find media elements and get sources
-  const sources = findMediaElementsAndGetSources();
-  if (sources.length == 0) return;
+  try {
+    // Find media elements and get sources
+    const mediaElements = findMediaElements();
+    if (mediaElements.length == 0) return;
 
-  // Check if popup exists
-  if (!popup) {
-    // Create popup
-    createPopup();
-    // Find popup elements
-    findElements();
+    // Check if popup exists
+    if (!popup) {
+      // Create popup
+      createPopup();
+      // Find popup elements
+      findElements();
+    }
+
+    // Create menu items
+    createMenuItems(mediaElements);
+
+    // Show popup
+    setTimeout(() => {
+      popup.classList.add("show");
+    }, 1000);
+  } catch (e) {
+    console.error(e);
   }
-
-  // Create menu items
-  createMenuItems(sources);
-
-  // Show popup
-  setTimeout(() => {
-    popup.classList.add("show");
-  }, 1000);
 }
 
 // Initialize popup
