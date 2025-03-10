@@ -1,3 +1,7 @@
+const appSettings = {
+  enabled: true,
+};
+
 // Create settings if not exist
 chrome.runtime.onInstalled.addListener(onInstalledAction);
 
@@ -5,7 +9,24 @@ chrome.runtime.onInstalled.addListener(onInstalledAction);
 chrome.runtime.onStartup.addListener(onStartupAction);
 
 // Raise event when user want to download a file
-chrome.downloads.onCreated.addListener(async (downloadItem) => await downloadsOnCreatedAction(downloadItem));
+chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
+  // Check extension is enabled
+  if (!appSettings.enabled) {
+    return;
+  }
+
+  // Avoid for showing Save As dialog
+  suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
+
+  // Cancel download
+  chrome.downloads.cancel(downloadItem.id);
+  chrome.downloads.erase({ id: downloadItem.id });
+
+  // Send download link to CDM
+  downloadFile(downloadItem.finalUrl);
+
+  return false;
+});
 
 // Toggle extension enable state
 chrome.action.onClicked.addListener(actionOnClickedAction);
@@ -18,22 +39,12 @@ chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
 
 async function onInstalledAction() {
   try {
-    // Get the settings
-    const { settings } = await chrome.storage.local.get("settings");
-
-    // If settings not found, set default value and load settings again
-    if (!settings) {
-      await chrome.storage.local.set({
-        settings: {
-          enabled: true,
-        },
-      });
-    }
-
-    // Check if the extension is enabled
-    const isEnabled = await checkIsEnabled();
+    // Create settings if not exist
+    await createSettingsIfNotExists();
+    // Load settings
+    await loadAppSettings();
     // Set the action badge to the new state
-    await changeBadgeState(isEnabled);
+    await changeBadgeState();
 
     // Add context menu
     createContextMenu();
@@ -58,61 +69,14 @@ function createContextMenu() {
 }
 
 async function onStartupAction() {
-  // Check if the extension is enabled
-  const isEnabled = await checkIsEnabled();
-  // Set the action badge to the new state
-  await changeBadgeState(isEnabled);
-}
-
-async function downloadsOnCreatedAction(downloadItem) {
   try {
-    // First pause the download on Chrome
-    await pauseDownload(downloadItem);
-
-    // Get the download item again
-    downloadItem = await findDownloadItemById(downloadItem.id);
-    // Capture the download URL
-    const downloadUrl = downloadItem.finalUrl;
-
-    // Make sure extension is enabled
-    const isEnabled = await checkIsEnabled();
-    if (!isEnabled) {
-      // Resume the download
-      await resumeDownload(downloadItem);
-      return;
-    }
-
-    // Cancel the download in Chrome
-    await cancelDownload(downloadItem);
-
-    // Start download file in CDM
-    await downloadFile(downloadUrl);
+    // Load settings
+    await loadAppSettings();
+    // Set the action badge to the new state
+    await changeBadgeState();
   } catch (error) {
-    console.log(error);
-    // Resume the download
-    await resumeDownload(downloadItem);
+    console.error(error);
   }
-}
-
-async function pauseDownload(downloadItem) {
-  await chrome.downloads.pause(downloadItem.id);
-  console.log("Download paused:", downloadItem);
-}
-
-async function resumeDownload(downloadItem) {
-  await chrome.downloads.resume(downloadItem.id);
-  console.log("Download resumed:", downloadItem);
-}
-
-async function cancelDownload(downloadItem) {
-  await chrome.downloads.cancel(downloadItem.id);
-  await chrome.downloads.erase({ id: downloadItem.id });
-  console.log("Download canceled:", downloadItem);
-}
-
-async function findDownloadItemById(downloadId) {
-  const downloadItems = await chrome.downloads.search({ id: downloadId });
-  return downloadItems[0];
 }
 
 async function downloadFile(downloadUrl) {
@@ -139,40 +103,70 @@ async function downloadFile(downloadUrl) {
   }
 }
 
+async function createSettingsIfNotExists() {
+  try {
+    const { settings } = await chrome.storage.local.get("settings");
+    if (settings) {
+      return;
+    }
+
+    // Save the settings
+    await saveAppSettings();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function loadAppSettings() {
+  // Load enabled state
+  appSettings.enabled = await checkIsEnabled();
+}
+
 async function checkIsEnabled() {
   try {
     // Get the settings and check if the extension is enabled
     const { settings } = await chrome.storage.local.get("settings");
-    const isEnabled = settings.enabled;
-    console.log(`Extension is ${isEnabled ? "enabled" : "disabled"}`);
+    console.log(`Extension is ${settings.enabled ? "enabled" : "disabled"}`);
 
-    return isEnabled;
+    return settings.enabled;
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return false;
   }
 }
 
-async function actionOnClickedAction() {
-  // Get the current state of the extension
-  const isEnabled = await checkIsEnabled();
-  console.log(isEnabled);
-
-  // Toggle the extension state
-  await chrome.storage.local.set({
-    settings: {
-      enabled: !isEnabled,
-    },
-  });
-
-  // Set the action badge to the new state
-  await changeBadgeState(!isEnabled);
+async function saveAppSettings() {
+  try {
+    // Save enabled state
+    await chrome.storage.local.set({
+      settings: appSettings,
+    });
+  } catch (error) {
+    console.error(error);
+  }
 }
 
-async function changeBadgeState(isEnabled) {
-  await chrome.action.setBadgeText({
-    text: isEnabled ? "" : "Off",
-  });
+async function actionOnClickedAction() {
+  try {
+    // Change enabled state
+    appSettings.enabled = !appSettings.enabled;
+    // Toggle the extension state
+    await saveAppSettings();
+    // Set the action badge to the new state
+    await changeBadgeState();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function changeBadgeState() {
+  try {
+    await chrome.action.setBadgeText({
+      text: appSettings.enabled ? "" : "Off",
+    });
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 async function handleMessages(message, sender, sendResponse) {
