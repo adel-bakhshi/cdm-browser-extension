@@ -12,32 +12,32 @@ browser.runtime.onInstalled.addListener(onInstalledAction);
 // Subscribe to the onStartup event
 browser.runtime.onStartup.addListener(onStartupAction);
 
-// Subscribe to the onDeterminingFilename event
-browser.downloads.onDeterminingFilename.addListener(async (downloadItem, suggest) => {
-  try {
-    // Make sure the extension is enabled
-    if (!appSettings.enabled) return;
+// Subscribe to the download create event
+// onDeterminingFilename not supported in Firefox
+browser.downloads.onCreated.addListener((downloadItem) => {
+  setTimeout(async () => {
+    try {
+      // Make sure the extension is enabled
+      if (!appSettings.enabled) return;
 
-    // Get file extension
-    const fileExtension = getFileExtension(downloadItem);
-    // Check if the file extension is supported
-    if (appSettings.supportedFileTypes.includes(fileExtension)) {
-      // Avoiding to show "Save as" if the download confirmed
-      suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
+      // Get file extension
+      const fileExtension = getFileExtension(downloadItem);
+      // Check if the file extension is supported
+      if (appSettings.supportedFileTypes.includes(fileExtension)) {
+        // Cancel the download in the browser
+        await browser.downloads.cancel(downloadItem.id);
+        await browser.downloads.erase({ id: downloadItem.id });
 
-      // Cancel the download in the browser
-      await browser.downloads.cancel(downloadItem.id);
-      await browser.downloads.erase({ id: downloadItem.id });
-
-      // Send download link to CDM
-      await downloadFile(downloadItem.url);
-    } else {
-      // Allow the download in browser
-      console.log("Download allowed in browser:", downloadItem.filename);
+        // Send download link to CDM
+        await downloadFile(downloadItem.url);
+      } else {
+        // Allow the download in browser
+        console.log("Download allowed in browser:", downloadItem.filename);
+      }
+    } catch (error) {
+      console.error("An error occurred while trying to capture download item.", error);
     }
-  } catch (error) {
-    console.error("An error occurred while trying to capture download item.", error);
-  }
+  }, 100);
 });
 
 // Subscribe to the onClick event
