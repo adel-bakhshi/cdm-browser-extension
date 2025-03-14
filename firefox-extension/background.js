@@ -1,44 +1,72 @@
-// Create settings if not exist
+const appSettings = {
+  enabled: true,
+  supportedFileTypes: [],
+};
+
+// Save last fetch time
+let lastFetchTime = 0;
+
+// Subscribe to the onInstalled event
 browser.runtime.onInstalled.addListener(onInstalledAction);
 
-// Check extension enable state when starting up
+// Subscribe to the onStartup event
 browser.runtime.onStartup.addListener(onStartupAction);
 
-// Raise event when user want to download a file
-browser.downloads.onCreated.addListener(async (downloadItem) => await downloadsOnCreatedAction(downloadItem));
+// Subscribe to the onDeterminingFilename event
+browser.downloads.onDeterminingFilename.addListener(async (downloadItem, suggest) => {
+  try {
+    // Make sure the extension is enabled
+    if (!appSettings.enabled) return;
 
-// Toggle extension enable state
+    // Get file extension
+    const fileExtension = getFileExtension(downloadItem);
+    // Check if the file extension is supported
+    if (appSettings.supportedFileTypes.includes(fileExtension)) {
+      // Avoiding to show "Save as" if the download confirmed
+      suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
+
+      // Cancel the download in the browser
+      await browser.downloads.cancel(downloadItem.id);
+      await browser.downloads.erase({ id: downloadItem.id });
+
+      // Send download link to CDM
+      await downloadFile(downloadItem.url);
+    } else {
+      // Allow the download in browser
+      console.log("Download allowed in browser:", downloadItem.filename);
+    }
+  } catch (error) {
+    console.error("An error occurred while trying to capture download item.", error);
+  }
+});
+
+// Subscribe to the onClick event
 browser.action.onClicked.addListener(actionOnClickedAction);
 
-// Listen to message events
+// Handle messages
 browser.runtime.onMessage.addListener(handleMessages);
 
 // Handle context menu click
 browser.contextMenus.onClicked.addListener(handleContextMenuClick);
 
+// Update supported file types when a new tab is created
+browser.tabs.onCreated.addListener(async () => await updateSupportedFileTypes());
+
 async function onInstalledAction() {
   try {
-    // Get the settings
-    const { settings } = await browser.storage.local.get("settings");
-
-    // If settings not found, set default value and load settings again
-    if (!settings) {
-      await browser.storage.local.set({
-        settings: {
-          enabled: true,
-        },
-      });
-    }
-
-    // Check if the extension is enabled
-    const isEnabled = await checkIsEnabled();
+    // Create settings if not exist
+    await createSettingsIfNotExists();
+    // Load settings
+    await loadAppSettings();
+    // Update supported file types
+    await updateSupportedFileTypes();
     // Set the action badge to the new state
-    await changeBadgeState(isEnabled);
+    await changeBadgeState();
 
     // Add context menu
     createContextMenu();
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error("An error occurred when the app installed:", error);
   }
 }
 
@@ -58,64 +86,18 @@ function createContextMenu() {
 }
 
 async function onStartupAction() {
-  // Check if the extension is enabled
-  const isEnabled = await checkIsEnabled();
-  // Set the action badge to the new state
-  await changeBadgeState(isEnabled);
-}
-
-async function downloadsOnCreatedAction(downloadItem) {
   try {
-    // First pause the download on FireFox
-    await pauseDownload(downloadItem);
-
-    // Get the download item again
-    downloadItem = await findDownloadItemById(downloadItem.id);
-    // Capture the download URL
-    const downloadUrl = downloadItem.finalUrl;
-
-    // Make sure extension is enabled
-    const isEnabled = await checkIsEnabled();
-    if (!isEnabled) {
-      // Resume the download
-      await resumeDownload(downloadItem);
-      return;
-    }
-
-    // Cancel the download in FireFox
-    await cancelDownload(downloadItem);
-
-    // Start download file in CDM
-    await downloadFile(downloadUrl);
+    // Load settings
+    await loadAppSettings();
+    // Set the action badge to the new state
+    await changeBadgeState();
+    // Update supported file types
+    await updateSupportedFileTypes();
   } catch (error) {
-    console.log(error);
-    // Resume the download
-    await resumeDownload(downloadItem);
+    console.error("An error occurred when the app started:", error);
   }
 }
 
-async function pauseDownload(downloadItem) {
-  await browser.downloads.pause(downloadItem.id);
-  console.log("Download paused:", downloadItem);
-}
-
-async function resumeDownload(downloadItem) {
-  await browser.downloads.resume(downloadItem.id);
-  console.log("Download resumed:", downloadItem);
-}
-
-async function cancelDownload(downloadItem) {
-  await browser.downloads.cancel(downloadItem.id);
-  await browser.downloads.erase({ id: downloadItem.id });
-  console.log("Download canceled:", downloadItem);
-}
-
-async function findDownloadItemById(downloadId) {
-  const downloadItems = await browser.downloads.search({ id: downloadId });
-  return downloadItems[0];
-}
-
-// Download file in CDM
 async function downloadFile(downloadUrl) {
   try {
     // Send request to download the file
@@ -140,42 +122,72 @@ async function downloadFile(downloadUrl) {
   }
 }
 
-// Check extension enable state
+async function createSettingsIfNotExists() {
+  try {
+    const { settings } = await browser.storage.local.get("settings");
+    if (settings) {
+      return;
+    }
+
+    // Save the settings
+    await saveAppSettings();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function loadAppSettings() {
+  // Load enabled state
+  appSettings.enabled = await checkIsEnabled();
+  // Load supported file types
+  await updateSupportedFileTypes(false);
+}
+
 async function checkIsEnabled() {
   try {
     // Get the settings and check if the extension is enabled
     const { settings } = await browser.storage.local.get("settings");
-    const isEnabled = settings.enabled;
-    console.log(`Extension is ${isEnabled ? "enabled" : "disabled"}`);
+    console.log(`Extension is ${settings.enabled ? "enabled" : "disabled"}`);
 
-    return isEnabled;
+    return settings.enabled;
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return false;
   }
 }
 
-async function actionOnClickedAction() {
-  // Get the current state of the extension
-  const isEnabled = await checkIsEnabled();
-  console.log(isEnabled);
-
-  // Toggle the extension enable state
-  await browser.storage.local.set({
-    settings: {
-      enabled: !isEnabled,
-    },
-  });
-
-  // Set the action badge to the new state
-  await changeBadgeState(!isEnabled);
+async function saveAppSettings() {
+  try {
+    // Save enabled state
+    await browser.storage.local.set({
+      settings: appSettings,
+    });
+  } catch (error) {
+    console.error(error);
+  }
 }
 
-// Change badge state
-async function changeBadgeState(isEnabled) {
-  await browser.action.setBadgeText({
-    text: isEnabled ? "" : "Off",
-  });
+async function actionOnClickedAction() {
+  try {
+    // Change enabled state
+    appSettings.enabled = !appSettings.enabled;
+    // Toggle the extension state
+    await saveAppSettings();
+    // Set the action badge to the new state
+    await changeBadgeState();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function changeBadgeState() {
+  try {
+    await browser.action.setBadgeText({
+      text: appSettings.enabled ? "" : "Off",
+    });
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 async function handleMessages(message, sender, sendResponse) {
@@ -227,5 +239,52 @@ async function handleContextMenuClick(info, tab) {
     }
   } catch (e) {
     console.error(e);
+  }
+}
+
+async function updateSupportedFileTypes(saveSettings = true) {
+  try {
+    // Get current time
+    const now = Date.now();
+    // Check if it's been more than 5 minutes since the last fetch
+    if (now - lastFetchTime < 5 * 60 * 1000) {
+      return;
+    }
+
+    // Update the last fetch time
+    lastFetchTime = now;
+    // Fetch the supported file types from the CDM
+    const response = await fetch("http://localhost:5000/cdm/download/filetypes/");
+    const result = await response.json();
+    // Check if the response is successful
+    if (!result.isSuccessful) {
+      console.error(`Failed to fetch supported file types. Error: ${result.message}`);
+      return;
+    }
+
+    // Update the supported file types
+    appSettings.supportedFileTypes = result.data;
+    console.log("Supported file types updated");
+
+    // Save settings
+    if (saveSettings) await saveAppSettings();
+  } catch (error) {
+    console.error("An error occurred while trying to update supported file types", error);
+  }
+}
+
+function getFileExtension(downloadItem) {
+  const fileName = downloadItem.filename;
+  if (fileName) {
+    return fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
+  } else {
+    // Extract file extension from URL
+    const url = downloadItem.url;
+    const lastSlashIndex = url.lastIndexOf("/");
+    const fileName = url.substring(lastSlashIndex + 1);
+
+    return fileName.includes("?")
+      ? fileName.substring(fileName.lastIndexOf("."), fileName.indexOf("?")).toLowerCase().trim()
+      : fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
   }
 }

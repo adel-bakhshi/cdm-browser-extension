@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Asap:ital,wght@0,100..900;1,100..900&display=swap");
 
+#cdm-popup,
 #cdm-popup *,
 #cdm-popup *::before,
 #cdm-popup *::after {
@@ -177,4 +178,26 @@
   width: 100%;
   height: 100%;
   fill: var(--navigate-icon-color);
+}
+
+/* width */
+#cdm-popup-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+/* Track */
+#cdm-popup-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Handle */
+#cdm-popup-menu::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.6);
+  border-radius: 4px;
+  transition: all ease 0.3s;
+}
+
+/* Handle on hover */
+#cdm-popup-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.8);
 }

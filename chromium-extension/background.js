@@ -1,41 +1,56 @@
 const appSettings = {
   enabled: true,
+  supportedFileTypes: [],
 };
 
-// Create settings if not exist
+// Save last fetch time
+let lastFetchTime = 0;
+
+// Subscribe to the onInstalled event
 chrome.runtime.onInstalled.addListener(onInstalledAction);
 
-// Check extension enable state when starting up
+// Subscribe to the onStartup event
 chrome.runtime.onStartup.addListener(onStartupAction);
 
-// Raise event when user want to download a file
-chrome.downloads.onDeterminingFilename.addListener((downloadItem, suggest) => {
-  // Check extension is enabled
-  if (!appSettings.enabled) {
-    return;
+// Subscribe to the onDeterminingFilename event
+chrome.downloads.onDeterminingFilename.addListener(async (downloadItem, suggest) => {
+  try {
+    // Make sure the extension is enabled
+    if (!appSettings.enabled) return;
+
+    // Get file extension
+    const fileExtension = getFileExtension(downloadItem);
+    // Check if the file extension is supported
+    if (appSettings.supportedFileTypes.includes(fileExtension)) {
+      // Avoiding to show "Save as" if the download confirmed
+      suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
+
+      // Cancel the download in the browser
+      await chrome.downloads.cancel(downloadItem.id);
+      await chrome.downloads.erase({ id: downloadItem.id });
+
+      // Send download link to CDM
+      await downloadFile(downloadItem.url);
+    } else {
+      // Allow the download in browser
+      console.log("Download allowed in browser:", downloadItem.filename);
+    }
+  } catch (error) {
+    console.error("An error occurred while trying to capture download item.", error);
   }
-
-  // Avoid for showing Save As dialog
-  suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
-
-  // Cancel download
-  chrome.downloads.cancel(downloadItem.id);
-  chrome.downloads.erase({ id: downloadItem.id });
-
-  // Send download link to CDM
-  downloadFile(downloadItem.finalUrl);
-
-  return false;
 });
 
-// Toggle extension enable state
+// Subscribe to the onMessage event
 chrome.action.onClicked.addListener(actionOnClickedAction);
 
-// Listen to message events
+// Handle messages
 chrome.runtime.onMessage.addListener(handleMessages);
 
 // Handle context menu click
 chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
+
+// Update supported file types when a new tab is created
+chrome.tabs.onCreated.addListener(async () => await updateSupportedFileTypes());
 
 async function onInstalledAction() {
   try {
@@ -43,13 +58,15 @@ async function onInstalledAction() {
     await createSettingsIfNotExists();
     // Load settings
     await loadAppSettings();
+    // Update supported file types
+    await updateSupportedFileTypes();
     // Set the action badge to the new state
     await changeBadgeState();
 
     // Add context menu
     createContextMenu();
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error("An error occurred when the app installed:", error);
   }
 }
 
@@ -74,8 +91,10 @@ async function onStartupAction() {
     await loadAppSettings();
     // Set the action badge to the new state
     await changeBadgeState();
+    // Update supported file types
+    await updateSupportedFileTypes();
   } catch (error) {
-    console.error(error);
+    console.error("An error occurred when the app started:", error);
   }
 }
 
@@ -120,6 +139,8 @@ async function createSettingsIfNotExists() {
 async function loadAppSettings() {
   // Load enabled state
   appSettings.enabled = await checkIsEnabled();
+  // Load supported file types
+  await updateSupportedFileTypes(false);
 }
 
 async function checkIsEnabled() {
@@ -218,5 +239,52 @@ async function handleContextMenuClick(info, tab) {
     }
   } catch (e) {
     console.error(e);
+  }
+}
+
+async function updateSupportedFileTypes(saveSettings = true) {
+  try {
+    // Get current time
+    const now = Date.now();
+    // Check if it's been more than 5 minutes since the last fetch
+    if (now - lastFetchTime < 5 * 60 * 1000) {
+      return;
+    }
+
+    // Update the last fetch time
+    lastFetchTime = now;
+    // Fetch the supported file types from the CDM
+    const response = await fetch("http://localhost:5000/cdm/download/filetypes/");
+    const result = await response.json();
+    // Check if the response is successful
+    if (!result.isSuccessful) {
+      console.error(`Failed to fetch supported file types. Error: ${result.message}`);
+      return;
+    }
+
+    // Update the supported file types
+    appSettings.supportedFileTypes = result.data;
+    console.log("Supported file types updated");
+
+    // Save settings
+    if (saveSettings) await saveAppSettings();
+  } catch (error) {
+    console.error("An error occurred while trying to update supported file types", error);
+  }
+}
+
+function getFileExtension(downloadItem) {
+  const fileName = downloadItem.filename;
+  if (fileName) {
+    return fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
+  } else {
+    // Extract file extension from URL
+    const url = downloadItem.url;
+    const lastSlashIndex = url.lastIndexOf("/");
+    const fileName = url.substring(lastSlashIndex + 1);
+
+    return fileName.includes("?")
+      ? fileName.substring(fileName.lastIndexOf("."), fileName.indexOf("?")).toLowerCase().trim()
+      : fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
   }
 }
