@@ -30,7 +30,7 @@ chrome.downloads.onDeterminingFilename.addListener(async (downloadItem, suggest)
       await chrome.downloads.erase({ id: downloadItem.id });
 
       // Send download link to CDM
-      await downloadFile(downloadItem.url);
+      await downloadFile(downloadItem.finalUrl ?? downloadItem.url);
     } else {
       // Allow the download in browser
       console.log("Download allowed in browser:", downloadItem.filename);
@@ -279,7 +279,7 @@ function getFileExtension(downloadItem) {
     return fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
   } else {
     // Extract file extension from URL
-    const url = downloadItem.url;
+    const url = downloadItem.finalUrl ?? downloadItem.url;
     const lastSlashIndex = url.lastIndexOf("/");
     const fileName = url.substring(lastSlashIndex + 1);
 
