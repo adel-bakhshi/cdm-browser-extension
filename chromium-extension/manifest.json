@@ -1,6 +1,6 @@
 {
   "name": "CDM Browser Extension",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Easily send download links to the CDM app and skip browser downloads. Enjoy advanced features like pause, resume, scheduling, and faster speeds for a smarter downloading experience. Simplify your workflow today!",
   "manifest_version": 3,
   "author": "Adel Bakhshi",
