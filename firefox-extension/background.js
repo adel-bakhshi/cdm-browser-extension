@@ -29,7 +29,7 @@ browser.downloads.onCreated.addListener((downloadItem) => {
         await browser.downloads.erase({ id: downloadItem.id });
 
         // Send download link to CDM
-        await downloadFile(downloadItem.finalUrl ?? downloadItem.url);
+        await downloadFile([{ url: downloadItem.finalUrl ?? downloadItem.url }]);
       } else {
         // Allow the download in browser
         console.log("Download allowed in browser:", downloadItem.filename);
@@ -47,7 +47,19 @@ browser.action.onClicked.addListener(actionOnClickedAction);
 browser.runtime.onMessage.addListener(handleMessages);
 
 // Handle context menu click
-browser.contextMenus.onClicked.addListener(handleContextMenuClick);
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
+  switch (info.menuItemId) {
+    case "cdm-single-item": {
+      await handleSingleItemContextMenuClick(info, tab);
+      break;
+    }
+
+    case "cdm-multiple-items": {
+      await handleMultipleItemsContextMenuClick(info, tab);
+      break;
+    }
+  }
+});
 
 // Update supported file types when a new tab is created
 browser.tabs.onCreated.addListener(async () => await updateSupportedFileTypes());
@@ -72,14 +84,21 @@ async function onInstalledAction() {
 
 function createContextMenu() {
   try {
-    const contexts = ["link", "image", "video", "audio"];
-    const options = {
-      contexts,
-      id: "cdm-context-menu",
+    // Single menu item (for all types)
+    browser.contextMenus.create({
+      id: "cdm-single-item",
       title: "Download with CDM",
-    };
+      contexts: ["link", "image", "video", "audio"],
+    });
 
-    browser.contextMenus.create(options);
+    // Multiple menu item (just for links)
+    browser.contextMenus.create({
+      id: "cdm-multiple-items",
+      title: "Download all links with CDM",
+      contexts: ["selection"],
+      documentUrlPatterns: ["*://*/*"],
+      targetUrlPatterns: ["*://*/*"],
+    });
   } catch (e) {
     console.error(e);
   }
@@ -98,25 +117,28 @@ async function onStartupAction() {
   }
 }
 
-async function downloadFile(downloadUrl) {
+async function downloadFile(data) {
   try {
     // Send request to download the file
     const response = await fetch("http://localhost:5000/cdm/download/add/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: downloadUrl }),
+      body: JSON.stringify(data),
     });
 
     // Get the response
-    const data = await response.json();
+    const result = await response.json();
     // Make sure that no error occurred
-    if (!data.isSuccessful) {
-      console.log(data.message ?? "Failed to download file");
+    if (!result.isSuccessful) {
+      console.log(result.message ?? "Failed to download file");
       return;
     }
 
     // Log that the download has started
-    console.log(data.message ?? `Download started in CDM: ${downloadUrl}`);
+    const message =
+      data.length > 1 ? `Download files added or started in CDM.` : `Download file added or started in CDM.`;
+
+    console.log(result.message ?? message, data);
   } catch (error) {
     console.log(error);
   }
@@ -203,7 +225,7 @@ async function handleMessages(message, sender, sendResponse) {
         }
 
         sendResponse({ isSuccessful: true, message: "Message received" });
-        await downloadFile(message.url);
+        await downloadFile([{ url: message.url }]);
         break;
       }
 
@@ -217,28 +239,90 @@ async function handleMessages(message, sender, sendResponse) {
   }
 }
 
-async function handleContextMenuClick(info, tab) {
+async function handleSingleItemContextMenuClick(info, tab) {
   try {
     if (info.mediaType) {
       // Handle images, videos and audios
       switch (info.mediaType?.toLowerCase()) {
         case "image": {
-          await downloadFile(info.linkUrl);
+          await downloadFile([{ url: info.linkUrl }]);
           break;
         }
 
         case "video":
         case "audio": {
-          await downloadFile(info.srcUrl);
+          await downloadFile([{ url: info.srcUrl }]);
           break;
         }
       }
     } else if (info.linkUrl) {
       // Handle links
-      await downloadFile(info.linkUrl);
+      await downloadFile([{ url: info.linkUrl }]);
     }
   } catch (e) {
     console.error(e);
+  }
+}
+
+async function handleMultipleItemsContextMenuClick(info, tab) {
+  try {
+    // Get selected links from the document
+    const links = await extractLinksFromSelection(tab.id, info.selectionText);
+    if (links.length > 0) {
+      console.log("Downloading multiple links:", links);
+      const result = links.map((link) => ({ url: link }));
+      await downloadFile(result);
+    }
+  } catch (e) {
+    console.error("An error occurred while trying to handle multiple items context menu click: ", e);
+  }
+}
+
+async function extractLinksFromSelection(tabId, selectionText) {
+  try {
+    // Check if the selection text is a valid URL
+    if (isValidUrl(selectionText)) {
+      return [selectionText];
+    }
+
+    // Extract links from document content
+    const links = await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        // Run extractor script to extract links
+        const selectedLinks = [];
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          const ancestor = range.commonAncestorContainer;
+          const parentElement = ancestor.nodeType === Node.ELEMENT_NODE ? ancestor : ancestor.parentElement;
+
+          if (parentElement) {
+            parentElement.querySelectorAll("a[href]").forEach((a) => {
+              if (selection.containsNode(a, true)) {
+                selectedLinks.push(a.href);
+              }
+            });
+          }
+        }
+
+        return selectedLinks;
+      },
+    });
+
+    return links[0].result || [];
+  } catch (error) {
+    console.error("Error extracting links:", error);
+    return [];
+  }
+}
+
+function isValidUrl(string) {
+  try {
+    new URL(string);
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
