@@ -353,7 +353,7 @@ async function updateSupportedFileTypes(saveSettings = true) {
     // Save settings
     if (saveSettings) await saveAppSettings();
   } catch (error) {
-    console.error("An error occurred while trying to update supported file types", error);
+    console.log("It's seems that the CDM is not running. Please start it and try again.", error);
   }
 }
 
