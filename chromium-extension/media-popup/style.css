@@ -9,20 +9,20 @@
   margin: 0;
   font-size: 14px;
   font-family: "Asap", sans-serif;
-  color: var(--text-color);
+  color: var(--cdm-text-color);
   line-height: 16px;
   direction: ltr;
 }
 
 :root {
-  --main-gradient: linear-gradient(90deg, #007bff 0%, #8000ff 50%, #ff007f 100%);
-  --white-color: #fff;
-  --text-color: #222;
-  --menu-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px;
-  --default-transition: all ease 0.3s;
-  --popup-menu-item-on-hover: #f6f6f6;
-  --row-number-color: #808080;
-  --navigate-icon-color: #3a58c2;
+  --cdm-main-gradient: linear-gradient(90deg, #007bff 0%, #8000ff 50%, #ff007f 100%);
+  --cdm-white-color: #fff;
+  --cdm-text-color: #222;
+  --cdm-menu-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px;
+  --cdm-default-transition: all ease 0.3s;
+  --cdm-popup-menu-item-on-hover: #f6f6f6;
+  --cdm-row-number-color: #808080;
+  --cdm-navigate-icon-color: #3a58c2;
 }
 
 #cdm-popup {
@@ -34,7 +34,7 @@
   right: -400px;
   margin: 20px;
   opacity: 0;
-  transition: var(--default-transition);
+  transition: var(--cdm-default-transition);
   z-index: 99999;
 }
 
@@ -58,16 +58,16 @@
   height: 40px;
   border: none;
   border-radius: 20px;
-  background: var(--main-gradient);
+  background: var(--cdm-main-gradient);
 }
 
 #cdm-popup-header .logo {
-  color: var(--white-color);
+  color: var(--cdm-white-color);
   font-weight: bold;
 }
 
 #cdm-popup-header .message {
-  color: var(--white-color);
+  color: var(--cdm-white-color);
 }
 
 #cdm-popup-header .actions {
@@ -86,9 +86,9 @@
   margin: 0;
   width: 16px;
   height: 16px;
-  color: var(--white-color);
+  color: var(--cdm-white-color);
   opacity: 1;
-  transition: var(--default-transition);
+  transition: var(--cdm-default-transition);
 }
 
 #cdm-popup-header .actions button.cdm-button:hover {
@@ -98,7 +98,7 @@
 #cdm-popup-header .actions button.cdm-button svg path {
   width: 100%;
   height: 100%;
-  fill: var(--white-color);
+  fill: var(--cdm-white-color);
 }
 
 #cdm-popup-header .actions button.reverse {
@@ -110,13 +110,13 @@
   top: calc(100% + 100px);
   width: 100%;
   max-height: 320px;
-  background-color: var(--white-color);
+  background-color: var(--cdm-white-color);
   border-radius: 8px;
   padding: 8px 0;
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--cdm-menu-shadow);
   opacity: 0;
   visibility: hidden;
-  transition: var(--default-transition);
+  transition: var(--cdm-default-transition);
   list-style: none;
   overflow: auto;
 }
@@ -131,7 +131,7 @@
   padding: 10px;
   margin: 0;
   cursor: pointer;
-  transition: var(--default-transition);
+  transition: var(--cdm-default-transition);
   background-color: transparent;
   display: inline-flex;
   flex-direction: row;
@@ -142,7 +142,7 @@
 }
 
 #cdm-popup-menu li:hover {
-  background-color: var(--popup-menu-item-on-hover);
+  background-color: var(--cdm-popup-menu-item-on-hover);
 }
 
 #cdm-popup-menu li span:not(.row-number) {
@@ -153,7 +153,7 @@
 }
 
 #cdm-popup-menu li span.row-number {
-  color: var(--row-number-color);
+  color: var(--cdm-row-number-color);
 }
 
 #cdm-popup-menu li button.navigate-button {
@@ -164,9 +164,9 @@
   margin: 0;
   width: 16px;
   height: 16px;
-  color: var(--white-color);
+  color: var(--cdm-white-color);
   opacity: 1;
-  transition: var(--default-transition);
+  transition: var(--cdm-default-transition);
   cursor: pointer;
 }
 
@@ -177,7 +177,7 @@
 #cdm-popup-menu li button.navigate-button svg path {
   width: 100%;
   height: 100%;
-  fill: var(--navigate-icon-color);
+  fill: var(--cdm-navigate-icon-color);
 }
 
 /* width */
