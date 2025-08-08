@@ -5,6 +5,8 @@ const appSettings = {
 
 // Save last fetch time
 let lastFetchTime = 0;
+// Save last captured download items
+let capturedDownloads = new Set();
 
 // Subscribe to the onInstalled event
 chrome.runtime.onInstalled.addListener(onInstalledAction);
@@ -12,32 +14,14 @@ chrome.runtime.onInstalled.addListener(onInstalledAction);
 // Subscribe to the onStartup event
 chrome.runtime.onStartup.addListener(onStartupAction);
 
+// Subscribe to the download create event
+chrome.downloads.onCreated.addListener((downloadItem) => {
+  setTimeout(async () => await handleDownload(downloadItem), 100);
+});
+
 // Subscribe to the onDeterminingFilename event
 chrome.downloads.onDeterminingFilename.addListener(async (downloadItem, suggest) => {
-  try {
-    // Make sure the extension is enabled
-    if (!appSettings.enabled) return;
-
-    // Get file extension
-    const fileExtension = getFileExtension(downloadItem);
-    // Check if the file extension is supported
-    if (appSettings.supportedFileTypes.includes(fileExtension)) {
-      // Avoiding to show "Save as" if the download confirmed
-      suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
-
-      // Cancel the download in the browser
-      await chrome.downloads.cancel(downloadItem.id);
-      await chrome.downloads.erase({ id: downloadItem.id });
-
-      // Send download link to CDM
-      await downloadFile([{ url: downloadItem.finalUrl ?? downloadItem.url }]);
-    } else {
-      // Allow the download in browser
-      console.log("Download allowed in browser:", downloadItem.filename);
-    }
-  } catch (error) {
-    console.error("An error occurred while trying to capture download item.", error);
-  }
+  await handleDownload(downloadItem, suggest);
 });
 
 // Subscribe to the onMessage event
@@ -114,6 +98,45 @@ async function onStartupAction() {
     await updateSupportedFileTypes();
   } catch (error) {
     console.error("An error occurred when the app started:", error);
+  }
+}
+
+async function handleDownload(downloadItem, suggest = null) {
+  try {
+    // Make sure the extension is enabled
+    if (!appSettings.enabled) return;
+
+    // Make sure the download is not already captured
+    if (capturedDownloads.has(downloadItem.id)) {
+      // Avoiding to show "Save as" if the download confirmed
+      if (suggest) suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
+      // Ignore the download because it's already captured
+      return;
+    }
+
+    // Capture and save download item id
+    capturedDownloads.add(downloadItem.id);
+    // Get file extension
+    const fileExtension = getFileExtension(downloadItem);
+    // Check if the file extension is supported
+    if (appSettings.supportedFileTypes.includes(fileExtension)) {
+      // Avoiding to show "Save as" if the download confirmed
+      if (suggest) suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
+
+      // Cancel the download in the browser
+      await chrome.downloads.cancel(downloadItem.id);
+      await chrome.downloads.erase({ id: downloadItem.id });
+
+      // Send download link to CDM
+      await downloadFile([{ url: downloadItem.finalUrl ?? downloadItem.url }]);
+    } else {
+      // Allow the download in browser
+      console.log("Download allowed in browser:", downloadItem.filename);
+    }
+  } catch (error) {
+    console.error("An error occurred while trying to capture download item.", error);
+  } finally {
+    setTimeout(() => capturedDownloads.delete(downloadItem.id), 5000);
   }
 }
 
