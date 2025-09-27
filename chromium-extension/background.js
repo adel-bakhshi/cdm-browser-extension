@@ -1,36 +1,63 @@
+/**
+ * Chrome Download Manager (CDM) Extension - Background Script
+ *
+ * This script handles download interception, context menu actions,
+ * and communication with the CDM desktop application.
+ */
+
+// Extension settings with default values
 const appSettings = {
   enabled: true,
   supportedFileTypes: [],
 };
 
-// Save last fetch time
+// Save last fetch time for supported file types (cache management)
 let lastFetchTime = 0;
-// Save last captured download items
+
+// Track captured downloads to prevent duplicate processing
 let capturedDownloads = new Set();
 
-// Subscribe to the onInstalled event
+// ============================================================================
+// EVENT LISTENERS SETUP
+// ============================================================================
+
+/**
+ * Extension installed event handler
+ */
 chrome.runtime.onInstalled.addListener(onInstalledAction);
 
-// Subscribe to the onStartup event
+/**
+ * Browser startup event handler
+ */
 chrome.runtime.onStartup.addListener(onStartupAction);
 
-// Subscribe to the download create event
-chrome.downloads.onCreated.addListener((downloadItem) => {
-  setTimeout(async () => await handleDownload(downloadItem), 100);
+/**
+ * Download creation event handler - triggered when a download starts
+ */
+chrome.downloads.onCreated.addListener(async (downloadItem) => {
+  await handleDownload(downloadItem);
 });
 
-// Subscribe to the onDeterminingFilename event
+/**
+ * Download filename determination event handler - allows intercepting downloads
+ */
 chrome.downloads.onDeterminingFilename.addListener(async (downloadItem, suggest) => {
   await handleDownload(downloadItem, suggest);
 });
 
-// Subscribe to the onMessage event
+/**
+ * Extension icon click event handler
+ */
 chrome.action.onClicked.addListener(actionOnClickedAction);
 
-// Handle messages
+/**
+ * Message handling from content scripts and popup
+ */
 chrome.runtime.onMessage.addListener(handleMessages);
 
-// Handle context menu click
+/**
+ * Context menu click event handler
+ */
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   switch (info.menuItemId) {
     case "cdm-single-item": {
@@ -45,27 +72,40 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// Update supported file types when a new tab is created
+/**
+ * Tab creation event handler - updates supported file types when new tab is created
+ */
 chrome.tabs.onCreated.addListener(async () => await updateSupportedFileTypes());
 
+// ============================================================================
+// CORE FUNCTIONS
+// ============================================================================
+
+/**
+ * Handles extension installation
+ * @async
+ */
 async function onInstalledAction() {
   try {
     // Create settings if not exist
     await createSettingsIfNotExists();
-    // Load settings
+    // Load settings from storage
     await loadAppSettings();
-    // Update supported file types
+    // Update supported file types from CDM
     await updateSupportedFileTypes();
-    // Set the action badge to the new state
+    // Update extension badge state
     await changeBadgeState();
 
-    // Add context menu
+    // Add context menu items
     createContextMenu();
   } catch (error) {
     console.error("An error occurred when the app installed:", error);
   }
 }
 
+/**
+ * Creates context menu items for the extension
+ */
 function createContextMenu() {
   try {
     // Single menu item (for all types)
@@ -88,19 +128,29 @@ function createContextMenu() {
   }
 }
 
+/**
+ * Handles browser startup
+ * @async
+ */
 async function onStartupAction() {
   try {
-    // Load settings
+    // Load settings from storage
     await loadAppSettings();
-    // Set the action badge to the new state
+    // Update extension badge state
     await changeBadgeState();
-    // Update supported file types
+    // Update supported file types from CDM
     await updateSupportedFileTypes();
   } catch (error) {
     console.error("An error occurred when the app started:", error);
   }
 }
 
+/**
+ * Handles download interception and processing
+ * @async
+ * @param {Object} downloadItem - The download item object from Chrome API
+ * @param {Function} [suggest=null] - Optional suggest function for filename determination
+ */
 async function handleDownload(downloadItem, suggest = null) {
   try {
     // Make sure the extension is enabled
@@ -116,9 +166,11 @@ async function handleDownload(downloadItem, suggest = null) {
 
     // Capture and save download item id
     capturedDownloads.add(downloadItem.id);
-    // Get file extension
+
+    // Get file extension using multiple detection methods
     const fileExtension = getFileExtension(downloadItem);
-    // Check if the file extension is supported
+
+    // Check if the file extension is supported by CDM
     if (appSettings.supportedFileTypes.includes(fileExtension)) {
       // Avoiding to show "Save as" if the download confirmed
       if (suggest) suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
@@ -127,30 +179,37 @@ async function handleDownload(downloadItem, suggest = null) {
       await chrome.downloads.cancel(downloadItem.id);
       await chrome.downloads.erase({ id: downloadItem.id });
 
-      // Send download link to CDM
+      // Send download link to CDM desktop application
       await downloadFile([{ url: downloadItem.finalUrl ?? downloadItem.url }]);
     } else {
-      // Allow the download in browser
+      // Allow the download in browser (unsupported file type)
       console.log("Download allowed in browser:", downloadItem.filename);
     }
   } catch (error) {
     console.error("An error occurred while trying to capture download item.", error);
   } finally {
+    // Clean up captured downloads after 5 seconds to prevent memory leaks
     setTimeout(() => capturedDownloads.delete(downloadItem.id), 5000);
   }
 }
 
+/**
+ * Sends download request to CDM desktop application
+ * @async
+ * @param {Array} data - Array of download objects containing URLs
+ */
 async function downloadFile(data) {
   try {
-    // Send request to download the file
+    // Send request to download the file via CDM API
     const response = await fetch("http://localhost:5000/cdm/download/add/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
 
-    // Get the response
+    // Get the response from CDM
     const result = await response.json();
+
     // Make sure that no error occurred
     if (!result.isSuccessful) {
       console.log(result.message ?? "Failed to download file");
@@ -163,10 +222,14 @@ async function downloadFile(data) {
 
     console.log(result.message ?? message, data);
   } catch (error) {
-    console.log(error);
+    console.log("CDM connection error:", error);
   }
 }
 
+/**
+ * Creates default settings if they don't exist in storage
+ * @async
+ */
 async function createSettingsIfNotExists() {
   try {
     const { settings } = await chrome.storage.local.get("settings");
@@ -174,20 +237,29 @@ async function createSettingsIfNotExists() {
       return;
     }
 
-    // Save the settings
+    // Save the default settings
     await saveAppSettings();
   } catch (error) {
     console.error(error);
   }
 }
 
+/**
+ * Loads application settings from storage
+ * @async
+ */
 async function loadAppSettings() {
   // Load enabled state
   appSettings.enabled = await checkIsEnabled();
-  // Load supported file types
+  // Load supported file types (without saving to avoid overwriting)
   await updateSupportedFileTypes(false);
 }
 
+/**
+ * Checks if the extension is enabled from storage
+ * @async
+ * @returns {boolean} True if extension is enabled
+ */
 async function checkIsEnabled() {
   try {
     // Get the settings and check if the extension is enabled
@@ -201,9 +273,13 @@ async function checkIsEnabled() {
   }
 }
 
+/**
+ * Saves application settings to storage
+ * @async
+ */
 async function saveAppSettings() {
   try {
-    // Save enabled state
+    // Save enabled state and supported file types
     await chrome.storage.local.set({
       settings: appSettings,
     });
@@ -212,19 +288,27 @@ async function saveAppSettings() {
   }
 }
 
+/**
+ * Handles extension icon click to toggle enabled state
+ * @async
+ */
 async function actionOnClickedAction() {
   try {
-    // Change enabled state
+    // Toggle enabled state
     appSettings.enabled = !appSettings.enabled;
-    // Toggle the extension state
+    // Save the new state
     await saveAppSettings();
-    // Set the action badge to the new state
+    // Update the extension badge
     await changeBadgeState();
   } catch (error) {
     console.error(error);
   }
 }
 
+/**
+ * Updates the extension badge to show enabled/disabled state
+ * @async
+ */
 async function changeBadgeState() {
   try {
     await chrome.action.setBadgeText({
@@ -235,10 +319,18 @@ async function changeBadgeState() {
   }
 }
 
+/**
+ * Handles messages from content scripts and popup
+ * @async
+ * @param {Object} message - The message object
+ * @param {Object} sender - The sender information
+ * @param {Function} sendResponse - Callback function to send response
+ */
 async function handleMessages(message, sender, sendResponse) {
   try {
     // Get message type
     const type = message?.type;
+
     // Handle message by type
     switch (type) {
       case "download_media": {
@@ -262,6 +354,12 @@ async function handleMessages(message, sender, sendResponse) {
   }
 }
 
+/**
+ * Handles single item context menu clicks
+ * @async
+ * @param {Object} info - Context menu click information
+ * @param {Object} tab - The active tab object
+ */
 async function handleSingleItemContextMenuClick(info, tab) {
   try {
     if (info.mediaType) {
@@ -287,6 +385,12 @@ async function handleSingleItemContextMenuClick(info, tab) {
   }
 }
 
+/**
+ * Handles multiple items context menu clicks (link selection)
+ * @async
+ * @param {Object} info - Context menu click information
+ * @param {Object} tab - The active tab object
+ */
 async function handleMultipleItemsContextMenuClick(info, tab) {
   try {
     // Get selected links from the document
@@ -301,6 +405,13 @@ async function handleMultipleItemsContextMenuClick(info, tab) {
   }
 }
 
+/**
+ * Extracts links from selected text in the current tab
+ * @async
+ * @param {number} tabId - The ID of the current tab
+ * @param {string} selectionText - The selected text content
+ * @returns {Array} Array of extracted URLs
+ */
 async function extractLinksFromSelection(tabId, selectionText) {
   try {
     // Check if the selection text is a valid URL
@@ -308,19 +419,21 @@ async function extractLinksFromSelection(tabId, selectionText) {
       return [selectionText];
     }
 
-    // Extract links from document content
+    // Extract links from document content using scripting API
     const links = await chrome.scripting.executeScript({
       target: { tabId: tabId },
       func: () => {
-        // Run extractor script to extract links
+        // Run extractor script to extract links from selected content
         const selectedLinks = [];
         const selection = window.getSelection();
+
         if (selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
           const ancestor = range.commonAncestorContainer;
           const parentElement = ancestor.nodeType === Node.ELEMENT_NODE ? ancestor : ancestor.parentElement;
 
           if (parentElement) {
+            // Find all anchor tags within the selected area
             parentElement.querySelectorAll("a[href]").forEach((a) => {
               if (selection.containsNode(a, true)) {
                 selectedLinks.push(a.href);
@@ -340,6 +453,11 @@ async function extractLinksFromSelection(tabId, selectionText) {
   }
 }
 
+/**
+ * Validates if a string is a valid URL
+ * @param {string} string - The string to validate
+ * @returns {boolean} True if the string is a valid URL
+ */
 function isValidUrl(string) {
   try {
     new URL(string);
@@ -349,49 +467,101 @@ function isValidUrl(string) {
   }
 }
 
+/**
+ * Fetches and updates supported file types from CDM application
+ * @async
+ * @param {boolean} [saveSettings=true] - Whether to save settings after update
+ */
 async function updateSupportedFileTypes(saveSettings = true) {
   try {
     // Get current time
     const now = Date.now();
-    // Check if it's been more than 5 minutes since the last fetch
+    // Check if it's been more than 5 minutes since the last fetch (cache for 5 minutes)
     if (now - lastFetchTime < 5 * 60 * 1000) {
       return;
     }
 
     // Update the last fetch time
     lastFetchTime = now;
-    // Fetch the supported file types from the CDM
+
+    // Fetch the supported file types from the CDM API
     const response = await fetch("http://localhost:5000/cdm/download/filetypes/");
     const result = await response.json();
+
     // Check if the response is successful
     if (!result.isSuccessful) {
       console.error(`Failed to fetch supported file types. Error: ${result.message}`);
       return;
     }
 
-    // Update the supported file types
+    // Update the supported file types in memory
     appSettings.supportedFileTypes = result.data;
     console.log("Supported file types updated");
 
-    // Save settings
+    // Save settings to storage if requested
     if (saveSettings) await saveAppSettings();
   } catch (error) {
     console.log("It's seems that the CDM is not running. Please start it and try again.", error);
   }
 }
 
-function getFileExtension(downloadItem) {
-  const fileName = downloadItem.filename;
-  if (fileName) {
-    return fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
-  } else {
-    // Extract file extension from URL
-    const url = downloadItem.finalUrl ?? downloadItem.url;
-    const lastSlashIndex = url.lastIndexOf("/");
-    const fileName = url.substring(lastSlashIndex + 1);
+// ============================================================================
+// FILE EXTENSION UTILITY FUNCTIONS
+// ============================================================================
 
-    return fileName.includes("?")
-      ? fileName.substring(fileName.lastIndexOf("."), fileName.indexOf("?")).toLowerCase().trim()
-      : fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
+/**
+ * Extracts the file extension from a download item using multiple methods
+ * @param {Object} downloadItem - The download item containing file information
+ * @returns {string} The file extension with dot prefix, empty string if not found
+ */
+function getFileExtension(downloadItem) {
+  const fileName = downloadItem.filename; // Get the filename from download item
+  let extension = ""; // Initialize extension variable
+
+  // First try to get extension from filename
+  if (fileName) {
+    // Extract substring after last dot, convert to lowercase and trim whitespace
+    extension = fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
+  } else {
+    // If no filename, extract file extension from final URL
+    extension = extractFileExtensionFromUrl(downloadItem.finalUrl);
+
+    // If the extension is empty or not supported, try the original URL
+    if (!extension || !appSettings.supportedFileTypes.includes(extension)) {
+      extension = extractFileExtensionFromUrl(downloadItem.url);
+    }
   }
+
+  // If still no valid extension, try to extract from MIME type
+  if (!extension || !appSettings.supportedFileTypes.includes(extension)) {
+    const mimeType = downloadItem.mime;
+    if (mimeType && mimeType.includes("/")) {
+      // Extract extension from MIME type (e.g., "image/png" -> ".png")
+      extension = `.${mimeType.split("/")[1].toLowerCase()}`;
+    }
+  }
+
+  return extension;
+}
+
+/**
+ * Extracts the file extension from a given URL
+ * @param {string} url - The URL from which to extract the file extension
+ * @returns {string} The file extension in lowercase, with leading/trailing whitespace removed
+ */
+function extractFileExtensionFromUrl(url) {
+  // Return empty string if no URL provided
+  if (!url) return "";
+
+  // Find the last occurrence of "/" in the URL to get the file name part
+  const lastSlashIndex = url.lastIndexOf("/");
+  // Extract the file name from the URL
+  const fileName = url.substring(lastSlashIndex + 1);
+
+  // Check if the file name contains query parameters (indicated by "?")
+  return fileName.includes("?")
+    ? // If there are query parameters, extract the extension up to the query parameter
+      fileName.substring(fileName.lastIndexOf("."), fileName.indexOf("?")).toLowerCase().trim()
+    : // If there are no query parameters, extract the extension from the last dot to the end
+      fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
 }
