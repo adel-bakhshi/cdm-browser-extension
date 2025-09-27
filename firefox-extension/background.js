@@ -33,7 +33,7 @@ browser.runtime.onStartup.addListener(onStartupAction);
  * onDeterminingFilename not supported in Firefox
  */
 browser.downloads.onCreated.addListener((downloadItem) => {
-  setTimeout(async () => await handleDownload(downloadItem), 100);
+  setTimeout(async () => await handleDownload(downloadItem), 50);
 });
 
 /**

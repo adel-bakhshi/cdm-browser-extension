@@ -35,7 +35,7 @@ chrome.runtime.onStartup.addListener(onStartupAction);
  * Download creation event handler - triggered when a download starts
  */
 chrome.downloads.onCreated.addListener((downloadItem) => {
-  setTimeout(async () => await handleDownload(downloadItem), 100);
+  setTimeout(async () => await handleDownload(downloadItem), 50);
 });
 
 /**
