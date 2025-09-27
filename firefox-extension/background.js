@@ -164,8 +164,8 @@ async function handleDownload(downloadItem) {
   } catch (error) {
     console.error("An error occurred while trying to capture download item.", error);
   } finally {
-    // Clean up captured downloads after 5 seconds to prevent memory leaks
-    setTimeout(() => capturedDownloads.delete(downloadItem.id), 5000);
+    // Clean up captured downloads after 1 second to prevent memory leaks
+    setTimeout(() => capturedDownloads.delete(downloadItem.id), 1000);
   }
 }
 

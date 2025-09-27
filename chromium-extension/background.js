@@ -34,8 +34,8 @@ chrome.runtime.onStartup.addListener(onStartupAction);
 /**
  * Download creation event handler - triggered when a download starts
  */
-chrome.downloads.onCreated.addListener(async (downloadItem) => {
-  await handleDownload(downloadItem);
+chrome.downloads.onCreated.addListener((downloadItem) => {
+  setTimeout(async () => await handleDownload(downloadItem), 100);
 });
 
 /**
@@ -188,8 +188,8 @@ async function handleDownload(downloadItem, suggest = null) {
   } catch (error) {
     console.error("An error occurred while trying to capture download item.", error);
   } finally {
-    // Clean up captured downloads after 5 seconds to prevent memory leaks
-    setTimeout(() => capturedDownloads.delete(downloadItem.id), 5000);
+    // Clean up captured downloads after 1 second to prevent memory leaks
+    setTimeout(() => capturedDownloads.delete(downloadItem.id), 1000);
   }
 }
 
