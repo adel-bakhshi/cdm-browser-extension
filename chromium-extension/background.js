@@ -17,6 +17,9 @@ let lastFetchTime = 0;
 // Track captured downloads to prevent duplicate processing
 let capturedDownloads = new Set();
 
+// Map to store download tab information.
+const urlToTabIdMap = new Map();
+
 // ============================================================================
 // EVENT LISTENERS SETUP
 // ============================================================================
@@ -32,10 +35,17 @@ chrome.runtime.onInstalled.addListener(onInstalledAction);
 chrome.runtime.onStartup.addListener(onStartupAction);
 
 /**
+ * Web request event handler - captures tabId for downloads.
+ */
+chrome.webRequest.onBeforeRequest.addListener(onBeforeRequestAction, {
+  urls: ["<all_urls>"],
+});
+
+/**
  * Download creation event handler - triggered when a download starts
  */
-chrome.downloads.onCreated.addListener((downloadItem) => {
-  setTimeout(async () => await handleDownload(downloadItem), 50);
+chrome.downloads.onCreated.addListener(async (downloadItem) => {
+  await handleDownload(downloadItem);
 });
 
 /**
@@ -146,6 +156,25 @@ async function onStartupAction() {
 }
 
 /**
+ * Web request event handler - captures tabId for downloads.
+ * @param {object} details - Web request details.
+ */
+function onBeforeRequestAction(details) {
+  // Define relevant types for capturing tabId
+  const relevantTypes = ["main_frame", "sub_frame", "other", "xmlhttprequest"];
+  // Only store tabId for valid tabs (tabId > 0) and for main_frame, sub_frame, and other types.
+  if (details.tabId > 0 && relevantTypes.includes(details.type)) {
+    // Store the tabId for the given URL.
+    urlToTabIdMap.set(details.url, details.tabId);
+
+    // Remove the entry after a short period to avoid stale data.
+    setTimeout(() => {
+      if (urlToTabIdMap.has(details.url)) urlToTabIdMap.delete(details.url);
+    }, 5000);
+  }
+}
+
+/**
  * Handles download interception and processing
  * @async
  * @param {Object} downloadItem - The download item object from Chrome API
@@ -176,11 +205,18 @@ async function handleDownload(downloadItem, suggest = null) {
       if (suggest) suggest({ filename: downloadItem.filename, conflictAction: "overwrite" });
 
       // Cancel the download in the browser
-      await chrome.downloads.cancel(downloadItem.id);
-      await chrome.downloads.erase({ id: downloadItem.id });
+      await runWithDelayAsync(async () => {
+        await chrome.downloads.cancel(downloadItem.id);
+        await chrome.downloads.erase({ id: downloadItem.id });
+      }, 100);
 
+      // Check for last error
+      checkLastError();
+
+      // Create download data
+      const data = await getDownloadData(downloadItem);
       // Send download link to CDM desktop application
-      await downloadFile([{ url: downloadItem.finalUrl ?? downloadItem.url }]);
+      await downloadFile([data]);
     } else {
       // Allow the download in browser (unsupported file type)
       console.log("Download allowed in browser:", downloadItem.filename);
@@ -191,6 +227,41 @@ async function handleDownload(downloadItem, suggest = null) {
     // Clean up captured downloads after 1 second to prevent memory leaks
     setTimeout(() => capturedDownloads.delete(downloadItem.id), 1000);
   }
+}
+
+/**
+ * Gets download data from download item.
+ * @param {Object} downloadItem - The download item object from Chrome API.
+ * @returns {Promise<Object>} - A promise that resolves to an object containing the download data.
+ */
+async function getDownloadData(downloadItem) {
+  // Get referer from download item
+  const referer = downloadItem.referrer ?? downloadItem.initiator ?? null;
+
+  // Map download URL to tab ID
+  const downloadUrl = downloadItem.finalUrl ?? downloadItem.url;
+  const tabId = urlToTabIdMap.get(downloadUrl) || null;
+
+  // Get page address if available
+  let pageAddress = null;
+  if (tabId && tabId > 0) {
+    try {
+      // Remove download URL from map
+      urlToTabIdMap.delete(downloadUrl);
+
+      // Get tab URL
+      const tab = await chrome.tabs.get(tabId);
+      pageAddress = tab.url;
+
+      // Check for last error
+      checkLastError();
+    } catch (e) {
+      console.error("Failed to get tab URL:", e);
+      pageAddress = null;
+    }
+  }
+
+  return createDownloadObject(downloadUrl, referer, pageAddress);
 }
 
 /**
@@ -340,7 +411,13 @@ async function handleMessages(message, sender, sendResponse) {
         }
 
         sendResponse({ isSuccessful: true, message: "Message received" });
-        await downloadFile([{ url: message.url }]);
+
+        // Get tab URL
+        const tabUrl = sender.tab?.url ?? sender.url ?? null;
+        // Get download data
+        const data = createDownloadObject(message.url, tabUrl, tabUrl);
+        // Download the file
+        await downloadFile([data]);
         break;
       }
 
@@ -362,24 +439,42 @@ async function handleMessages(message, sender, sendResponse) {
  */
 async function handleSingleItemContextMenuClick(info, tab) {
   try {
+    // Define data object to be sent to CDM
+    const data = createDownloadObject("", tab.url, tab.url);
+
     if (info.mediaType) {
+      // Define url variable
+      let url = "";
+
       // Handle images, videos and audios
       switch (info.mediaType?.toLowerCase()) {
         case "image": {
-          await downloadFile([{ url: info.linkUrl }]);
+          url = info.linkUrl;
           break;
         }
 
         case "video":
         case "audio": {
-          await downloadFile([{ url: info.srcUrl }]);
+          url = info.srcUrl;
           break;
         }
       }
+
+      // Set url in data object
+      data.url = url;
     } else if (info.linkUrl) {
-      // Handle links
-      await downloadFile([{ url: info.linkUrl }]);
+      // Set url in data object
+      data.url = info.linkUrl;
     }
+
+    // Check if there is a valid URL
+    if (!data.url) {
+      console.log(`No valid URL found for ${info.mediaType}`);
+      return;
+    }
+
+    // Download the file
+    await downloadFile([data]);
   } catch (e) {
     console.error(e);
   }
@@ -395,9 +490,13 @@ async function handleMultipleItemsContextMenuClick(info, tab) {
   try {
     // Get selected links from the document
     const links = await extractLinksFromSelection(tab.id, info.selectionText);
+    // Check if there are any links
     if (links.length > 0) {
+      // Log the links data
       console.log("Downloading multiple links:", links);
-      const result = links.map((link) => ({ url: link }));
+      // Convert links to data object format
+      const result = links.map((link) => createDownloadObject(link, tab.url, tab.url));
+      // Download the files
       await downloadFile(result);
     }
   } catch (e) {
@@ -564,4 +663,46 @@ function extractFileExtensionFromUrl(url) {
       fileName.substring(fileName.lastIndexOf("."), fileName.indexOf("?")).toLowerCase().trim()
     : // If there are no query parameters, extract the extension from the last dot to the end
       fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
+}
+
+/**
+ * Runs an action with a delay.
+ * @param {function} action - The action to run.
+ * @param {number} delay - The delay in milliseconds.
+ * @returns {Promise} A promise that resolves after the delay.
+ */
+function runWithDelayAsync(action, delay) {
+  return new Promise((resolve, reject) => {
+    setTimeout(async () => {
+      try {
+        const result = await action();
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      }
+    }, delay);
+  });
+}
+
+/**
+ * Checks for the last error and logs it if present.
+ */
+function checkLastError() {
+  const lastError = chrome.runtime.lastError;
+  if (lastError) console.error("An error occurred while trying to cancel download item.", lastError);
+}
+
+/**
+ * Creates the download data object to be sent to CDM.
+ * @param {string} url - The URL of the file to be downloaded.
+ * @param {string} referer - The referer URL.
+ * @param {string} pageAddress - The page address.
+ * @returns {Object} The download data object.
+ */
+function createDownloadObject(url, referer, pageAddress) {
+  return {
+    url,
+    referer,
+    pageAddress,
+  };
 }

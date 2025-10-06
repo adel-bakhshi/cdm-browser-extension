@@ -32,9 +32,7 @@ browser.runtime.onStartup.addListener(onStartupAction);
  * Download creation event handler - triggered when a download starts
  * onDeterminingFilename not supported in Firefox
  */
-browser.downloads.onCreated.addListener((downloadItem) => {
-  setTimeout(async () => await handleDownload(downloadItem), 50);
-});
+browser.downloads.onCreated.addListener(async (downloadItem) => await handleDownload(downloadItem));
 
 /**
  * Extension icon click event handler
@@ -152,21 +150,43 @@ async function handleDownload(downloadItem) {
     // Check if the file extension is supported by CDM
     if (appSettings.supportedFileTypes.includes(fileExtension)) {
       // Cancel the download in the browser
-      await browser.downloads.cancel(downloadItem.id);
-      await browser.downloads.erase({ id: downloadItem.id });
+      await runWithDelayAsync(async () => {
+        await browser.downloads.cancel(downloadItem.id);
+        await browser.downloads.erase({ id: downloadItem.id });
+      }, 100);
 
+      // Check for last error
+      checkLastError();
+
+      // Create download data
+      const data = await getDownloadData(downloadItem);
       // Send download link to CDM desktop application
-      await downloadFile([{ url: downloadItem.finalUrl ?? downloadItem.url }]);
+      await downloadFile([data]);
     } else {
       // Allow the download in browser (unsupported file type)
       console.log("Download allowed in browser:", downloadItem.filename);
     }
   } catch (error) {
     console.error("An error occurred while trying to capture download item.", error);
-  } finally {
-    // Clean up captured downloads after 1 second to prevent memory leaks
-    setTimeout(() => capturedDownloads.delete(downloadItem.id), 1000);
   }
+}
+
+/**
+ * Gets download data from download item.
+ * @param {Object} downloadItem - The download item object from Browser API.
+ * @returns {Promise<Object>} - A promise that resolves to an object containing the download data.
+ */
+async function getDownloadData(downloadItem) {
+  // Get referer from download item
+  const referer = downloadItem.referrer ?? downloadItem.initiator ?? null;
+  // Map download URL to tab ID
+  const downloadUrl = downloadItem.finalUrl ?? downloadItem.url;
+
+  // Get the active tab to find the page where the download was initiated
+  const activeTab = await getActiveTab();
+  const pageAddress = activeTab?.url ?? null;
+
+  return createDownloadObject(downloadUrl, referer, pageAddress);
 }
 
 /**
@@ -316,7 +336,13 @@ async function handleMessages(message, sender, sendResponse) {
         }
 
         sendResponse({ isSuccessful: true, message: "Message received" });
-        await downloadFile([{ url: message.url }]);
+
+        // Get tab URL
+        const tabUrl = sender.tab?.url ?? sender.url ?? null;
+        // Get download data
+        const data = createDownloadObject(message.url, tabUrl, tabUrl);
+        // Download the file
+        await downloadFile([data]);
         break;
       }
 
@@ -338,24 +364,42 @@ async function handleMessages(message, sender, sendResponse) {
  */
 async function handleSingleItemContextMenuClick(info, tab) {
   try {
+    // Define data object to be sent to CDM
+    const data = createDownloadObject("", tab.url, tab.url);
+
     if (info.mediaType) {
+      // Define url variable
+      let url = "";
+
       // Handle images, videos and audios
       switch (info.mediaType?.toLowerCase()) {
         case "image": {
-          await downloadFile([{ url: info.linkUrl }]);
+          url = info.linkUrl;
           break;
         }
 
         case "video":
         case "audio": {
-          await downloadFile([{ url: info.srcUrl }]);
+          url = info.srcUrl;
           break;
         }
       }
+
+      // Set url in data object
+      data.url = url;
     } else if (info.linkUrl) {
-      // Handle links
-      await downloadFile([{ url: info.linkUrl }]);
+      // Set url in data object
+      data.url = info.linkUrl;
     }
+
+    // Check if there is a valid URL
+    if (!data.url) {
+      console.log(`No valid URL found for ${info.mediaType}`);
+      return;
+    }
+
+    // Download the file
+    await downloadFile([data]);
   } catch (e) {
     console.error(e);
   }
@@ -371,9 +415,13 @@ async function handleMultipleItemsContextMenuClick(info, tab) {
   try {
     // Get selected links from the document
     const links = await extractLinksFromSelection(tab.id, info.selectionText);
+    // Check if there are any links
     if (links.length > 0) {
+      // Log the links data
       console.log("Downloading multiple links:", links);
-      const result = links.map((link) => ({ url: link }));
+      // Convert links to data object format
+      const result = links.map((link) => createDownloadObject(link, tab.url, tab.url));
+      // Download the files
       await downloadFile(result);
     }
   } catch (e) {
@@ -540,4 +588,67 @@ function extractFileExtensionFromUrl(url) {
       fileName.substring(fileName.lastIndexOf("."), fileName.indexOf("?")).toLowerCase().trim()
     : // If there are no query parameters, extract the extension from the last dot to the end
       fileName.substring(fileName.lastIndexOf(".")).toLowerCase().trim();
+}
+
+/**
+ * Runs an action with a delay.
+ * @param {function} action - The action to run.
+ * @param {number} delay - The delay in milliseconds.
+ * @returns {Promise} A promise that resolves after the delay.
+ */
+function runWithDelayAsync(action, delay) {
+  return new Promise((resolve, reject) => {
+    setTimeout(async () => {
+      try {
+        const result = await action();
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      }
+    }, delay);
+  });
+}
+
+/**
+ * Checks for the last error and logs it if present.
+ */
+function checkLastError() {
+  const lastError = browser.runtime.lastError;
+  if (lastError) console.error("An error occurred while trying to cancel download item.", lastError);
+}
+
+/**
+ * Gets the active tab in the current window.
+ * @async
+ * @returns {Promise<Object | null>} - A promise that resolves to the active tab object or null.
+ */
+async function getActiveTab() {
+  try {
+    // Query for the active tab in the current window
+    const tabs = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+
+    // tabs is an array, and with the query above, it should only contain one tab
+    return tabs.length > 0 ? tabs[0] : null;
+  } catch (error) {
+    console.error("Error getting active tab:", error);
+    return null;
+  }
+}
+
+/**
+ * Creates the download data object to be sent to CDM.
+ * @param {string} url - The URL of the file to be downloaded.
+ * @param {string} referer - The referer URL.
+ * @param {string} pageAddress - The page address.
+ * @returns {Object} The download data object.
+ */
+function createDownloadObject(url, referer, pageAddress) {
+  return {
+    url,
+    referer,
+    pageAddress,
+  };
 }
