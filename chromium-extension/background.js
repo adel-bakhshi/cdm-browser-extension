@@ -87,6 +87,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  */
 chrome.tabs.onCreated.addListener(async () => await updateSupportedFileTypes());
 
+/**
+ * Alarm event handler - handle keep-alive alarm
+ */
+chrome.alarms.onAlarm.addListener((alarm) => onAlarmAction(alarm));
+
 // ============================================================================
 // CORE FUNCTIONS
 // ============================================================================
@@ -108,6 +113,9 @@ async function onInstalledAction() {
 
     // Add context menu items
     createContextMenu();
+
+    // Keep-alive alarm
+    await chrome.alarms.create("keep-alive", { periodInMinutes: 0.5 });
   } catch (error) {
     console.error("An error occurred when the app installed:", error);
   }
@@ -206,8 +214,12 @@ async function handleDownload(downloadItem, suggest = null) {
 
       // Cancel the download in the browser
       await runWithDelayAsync(async () => {
-        await chrome.downloads.cancel(downloadItem.id);
-        await chrome.downloads.erase({ id: downloadItem.id });
+        try {
+          await chrome.downloads.cancel(downloadItem.id);
+          await chrome.downloads.erase({ id: downloadItem.id });
+        } catch (error) {
+          console.error("Failed to cancel download:", error);
+        }
       }, 100);
 
       // Check for last error
@@ -601,6 +613,17 @@ async function updateSupportedFileTypes(saveSettings = true) {
     if (saveSettings) await saveAppSettings();
   } catch (error) {
     console.log("It's seems that the CDM is not running. Please start it and try again.", error);
+  }
+}
+
+/**
+ * Handles alarm action
+ * @param {any} alarm - Alarm object
+ */
+function onAlarmAction(alarm) {
+  if (alarm.name === "keep-alive") {
+    // Keep-alive action
+    console.log("Service worker keep-alive...");
   }
 }
 
