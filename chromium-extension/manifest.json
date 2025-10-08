@@ -5,7 +5,16 @@
   "manifest_version": 3,
   "author": "Adel Bakhshi",
   "homepage_url": "https://cdmapp.netlify.app/",
-  "permissions": ["downloads", "storage", "scripting", "contextMenus", "webRequest", "declarativeNetRequest", "alarms"],
+  "permissions": [
+    "downloads",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "webRequest",
+    "declarativeNetRequest",
+    "alarms",
+    "notifications"
+  ],
   "host_permissions": ["*://*/*"],
   "icons": {
     "16": "images/icon-16.png",

@@ -9,6 +9,7 @@
 const appSettings = {
   enabled: true,
   supportedFileTypes: [],
+  lastCheckForUpdates: 0,
 };
 
 // Save last fetch time for supported file types (cache management)
@@ -116,6 +117,9 @@ async function onInstalledAction() {
 
     // Keep-alive alarm
     await chrome.alarms.create("keep-alive", { periodInMinutes: 0.5 });
+
+    // Check for extension updates
+    await checkForExtensionUpdates();
   } catch (error) {
     console.error("An error occurred when the app installed:", error);
   }
@@ -332,28 +336,19 @@ async function createSettingsIfNotExists() {
  * @async
  */
 async function loadAppSettings() {
+  // Get the settings and check if the extension is enabled
+  const { settings } = await chrome.storage.local.get("settings");
+
   // Load enabled state
-  appSettings.enabled = await checkIsEnabled();
+  appSettings.enabled = settings.enabled;
+  console.log(`Extension is ${appSettings.enabled ? "enabled" : "disabled"}`);
+
+  // Load last check for updates
+  appSettings.lastCheckForUpdates = settings.lastCheckForUpdates ?? 0;
+  console.log(`Last check for updates: ${appSettings.lastCheckForUpdates}`);
+
   // Load supported file types (without saving to avoid overwriting)
   await updateSupportedFileTypes(false);
-}
-
-/**
- * Checks if the extension is enabled from storage
- * @async
- * @returns {boolean} True if extension is enabled
- */
-async function checkIsEnabled() {
-  try {
-    // Get the settings and check if the extension is enabled
-    const { settings } = await chrome.storage.local.get("settings");
-    console.log(`Extension is ${settings.enabled ? "enabled" : "disabled"}`);
-
-    return settings.enabled;
-  } catch (error) {
-    console.error(error);
-    return false;
-  }
 }
 
 /**
@@ -728,4 +723,135 @@ function createDownloadObject(url, referer, pageAddress) {
     referer,
     pageAddress,
   };
+}
+
+/**
+ * Checks for extension updates.
+ * @returns {Promise} A promise that resolves when the check is complete.
+ */
+async function checkForExtensionUpdates() {
+  try {
+    // Get the current time
+    const now = Date.now();
+    // Calculate 24 hours in milliseconds
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    // Check if the last update check was more than 24 hours ago
+    if (now - appSettings.lastCheckForUpdates < twentyFourHours) {
+      console.log("Update check was performed recently, skipping...");
+      return;
+    }
+
+    // Update last check time
+    appSettings.lastCheckForUpdates = now;
+    await saveAppSettings();
+
+    // Get the manifest data
+    const manifest = chrome.runtime.getManifest();
+    if (!manifest) return;
+
+    // Get the current version of the extension
+    const currentVersion = manifest.version;
+    console.log("Current extension version: " + currentVersion);
+
+    // Get the latest version from the server
+    const response = await fetch("https://cdmapp.netlify.app/api/extension-version");
+    const result = await response.json();
+    const latestVersion = result.version.replace("v", "");
+    console.log("Latest extension version: " + latestVersion);
+
+    // Compare versions correctly
+    if (compareVersions(currentVersion, latestVersion) >= 0) {
+      console.log("Extension is up to date");
+      return;
+    }
+
+    console.log("New version available, downloading...");
+
+    // Create notification
+    const notificationId = `update-${Date.now()}`;
+    await chrome.notifications.create(notificationId, {
+      type: "basic",
+      iconUrl: "images/icon-128.png",
+      title: "Extension Update Available",
+      message: `Update to version ${latestVersion} is available. Click to download the latest version.`,
+      contextMessage: "CDM Browser Extension",
+      buttons: [{ title: "Download Update" }, { title: "Not Now" }],
+      priority: 2,
+    });
+
+    // Listen for button clicks
+    chrome.notifications.onButtonClicked.addListener(async function onButtonClicked(
+      clickedNotificationId,
+      buttonIndex
+    ) {
+      if (clickedNotificationId !== notificationId) return;
+
+      // Remove listener after first click
+      chrome.notifications.onButtonClicked.removeListener(onButtonClicked);
+
+      if (buttonIndex === 0) {
+        // Download button
+        await downloadLatestVersion(latestVersion);
+      } else {
+        console.log("User postponed the download");
+      }
+
+      // Clear notification
+      chrome.notifications.clear(clickedNotificationId);
+    });
+
+    // Listen for notification click (when user clicks the notification body)
+    chrome.notifications.onClicked.addListener(function onClicked(clickedNotificationId) {
+      if (clickedNotificationId !== notificationId) return;
+
+      chrome.notifications.onClicked.removeListener(onClicked);
+      chrome.notifications.clear(clickedNotificationId);
+    });
+  } catch (e) {
+    console.error("Error checking for extension updates:", e);
+  }
+}
+
+/**
+ * Compares two version strings.
+ * @param {String} versionA - The first version string.
+ * @param {String} versionB - The second version string.
+ * @returns {Number} - A negative number if versionA is less than versionB, a positive number if versionA is greater than versionB, and 0 if they are equal.
+ */
+function compareVersions(versionA, versionB) {
+  // Split the version strings into parts
+  const partsA = versionA.split(".").map((part) => parseInt(part, 10));
+  const partsB = versionB.split(".").map((part) => parseInt(part, 10));
+
+  // Get the maximum length of the two arrays
+  const maxLength = Math.max(partsA.length, partsB.length);
+
+  // Compare each part of the version strings
+  for (let i = 0; i < maxLength; i++) {
+    const partA = partsA[i] || 0;
+    const partB = partsB[i] || 0;
+
+    if (partA > partB) return 1;
+    if (partA < partB) return -1;
+  }
+
+  return 0;
+}
+
+/**
+ * Downloads the latest version of the extension.
+ * @param {String} latestVersion - The latest version of the extension.
+ */
+async function downloadLatestVersion(latestVersion) {
+  try {
+    // Use the actual version in download URL
+    const downloadUrl = `https://github.com/adel-bakhshi/cdm-browser-extension/releases/download/v${latestVersion}/chromium-extension.zip`;
+    // Download the file
+    await chrome.downloads.download({
+      url: downloadUrl,
+      filename: `chromium-extension-v${latestVersion}.zip`,
+    });
+  } catch (e) {
+    console.error("Error downloading the latest version:", e);
+  }
 }
