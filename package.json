@@ -2,7 +2,7 @@
   "private": true,
   "name": "cdm-browser-extension",
   "description": "Easily send download links to the CDM app and skip browser downloads. Enjoy advanced features like pause, resume, scheduling, and faster speeds for a smarter downloading experience. Simplify your workflow today!",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "license": "AGPL-3.0-only",
   "type": "module",
   "author": {
