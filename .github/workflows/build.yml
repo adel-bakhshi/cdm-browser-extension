@@ -1,0 +1,52 @@
+name: Build and Package Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for Chrome
+        run: npx extension build --browser=chrome
+
+      - name: Build for Firefox
+        run: npx extension build --browser=firefox
+
+      - name: Package Chrome Extension
+        run: |
+          cd dist/chrome
+          zip -r ../../chromium-extension.zip .
+          cd ../..
+
+      - name: Package Firefox Extension
+        run: |
+          cd dist/firefox
+          zip -r ../../firefox-extension.zip .
+          cd ../..
+
+      - name: Upload Chrome Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-extension
+          path: chromium-extension.zip
+
+      - name: Upload Firefox Artifact
+        uses: actions/upload-artifact@v4
+          name: firefox-extension
+          path: firefox-extension.zip
