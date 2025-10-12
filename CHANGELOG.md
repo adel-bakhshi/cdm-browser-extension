@@ -1,3 +1,10 @@
+## [0.6.1] - 2025-10-12
+
+### Fixed
+
+- Fixed duplicate Context Menu creation issue
+- Resolved keep alive alarm problem and ensured only one keep alive alarm is created
+
 ## [0.6.0] - 2025-10-11
 
 ### Changed

@@ -110,11 +110,11 @@ async function initializeExtension() {
 
     // Add context menu items
     globalLogger.logInfo("Creating context menu items...");
-    createContextMenu();
+    createContextMenus();
 
     // Keep-alive alarm
     globalLogger.logInfo("Creating keep-alive alarm...");
-    await chrome.alarms.create("keep-alive", { periodInMinutes: 0.5 });
+    await createKeepAliveAlarm();
 
     if (browserType === BrowserType.Chromium) {
       // Check for extension updates
@@ -129,25 +129,48 @@ async function initializeExtension() {
 /**
  * Creates context menu items for the extension.
  */
-function createContextMenu() {
+function createContextMenus() {
   try {
-    // Single menu item (for all types)
-    chrome.contextMenus.create({
-      id: "cdm-single-item",
-      title: "Download with CDM",
-      contexts: ["link", "image", "video", "audio"],
-    });
+    // Check if context menu items already exist
+    chrome.contextMenus.removeAll(() => {
+      // Single menu item (for all types)
+      chrome.contextMenus.create({
+        id: "cdm-single-item",
+        title: "Download with CDM",
+        contexts: ["link", "image", "video", "audio"],
+      });
 
-    // Multiple menu item (just for links)
-    chrome.contextMenus.create({
-      id: "cdm-multiple-items",
-      title: "Download all links with CDM",
-      contexts: ["selection"],
-      documentUrlPatterns: ["*://*/*"],
-      targetUrlPatterns: ["*://*/*"],
+      // Multiple menu item (just for links)
+      chrome.contextMenus.create({
+        id: "cdm-multiple-items",
+        title: "Download all links with CDM",
+        contexts: ["selection"],
+        documentUrlPatterns: ["*://*/*"],
+        targetUrlPatterns: ["*://*/*"],
+      });
     });
   } catch (error) {
     globalLogger.logError("An error occurred when creating context menu items:", error);
+  }
+}
+
+/**
+ * Creates a keep-alive alarm to keep the extension alive.
+ * @returns A Promise that resolves when the keep-alive alarm is created.
+ */
+async function createKeepAliveAlarm() {
+  try {
+    // Check if keep-alive alarm already exists
+    const keepAliveAlarm = await chrome.alarms.get("keep-alive");
+    if (keepAliveAlarm) {
+      globalLogger.logDebug("Keep-alive alarm already exists. Skipping creation...");
+      return;
+    }
+
+    // Create keep-alive alarm
+    await chrome.alarms.create("keep-alive", { periodInMinutes: 0.5 });
+  } catch (error) {
+    globalLogger.logError("An error occurred when creating keep-alive alarm:", error);
   }
 }
 
