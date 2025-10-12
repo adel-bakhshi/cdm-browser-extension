@@ -44,7 +44,11 @@
   "firefox:browser_specific_settings": {
     "gecko": {
       "id": "adelbakhshi78@yahoo.com",
-      "strict_min_version": "109.0"
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": false,
+        "optional": false
+      }
     }
   },
   "web_accessible_resources": [

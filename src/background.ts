@@ -148,6 +148,9 @@ function createContextMenus() {
         documentUrlPatterns: ["*://*/*"],
         targetUrlPatterns: ["*://*/*"],
       });
+
+      // Check for last error
+      checkLastError();
     });
   } catch (error) {
     globalLogger.logError("An error occurred when creating context menu items:", error);
