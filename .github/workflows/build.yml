@@ -19,44 +19,43 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          cd src
+          npm install
 
       - name: Build for Chrome
-        run: npx extension build --browser=chrome
+        run: |
+          cd src
+          npx extension build --browser=chrome
 
       - name: Build for Firefox
-        run: npx extension build --browser=firefox
+        run: |
+          cd src
+          npx extension build --browser=firefox
 
       - name: Package Chrome Extension
         run: |
-          cd dist/chrome
-          zip -r ../../chromium-extension.zip .
-          cd ../..
+          mkdir -p bin
+          cd src/dist/chrome
+          zip -r ../../../bin/chromium-extension.zip .
 
       - name: Package Firefox Extension
         run: |
-          cd dist/firefox
-          zip -r ../../firefox-extension.zip .
-          cd ../..
+          mkdir -p bin
+          cd src/dist/firefox
+          zip -r ../../../bin/firefox-extension.zip .
 
-      - name: Upload Chrome Artifact
+      - name: Upload CDM Extension Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: chromium-extension
-          path: chromium-extension.zip
-
-      - name: Upload Firefox Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firefox-extension
-          path: firefox-extension.zip
+          name: CDM Extension Artifacts
+          path: bin/*
 
       - name: Create Release and Upload Assets
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag: ${{ github.ref_name }}
           name: CDM Browser Extension ${{ github.ref_name }}
-          files: |
-            chromium-extension.zip
-            firefox-extension.zip
-          token: ${{ secrets.GITHUB_TOKEN }}
+          files: bin/*
