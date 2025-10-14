@@ -90,7 +90,7 @@ class Logger {
    */
   public log(level: LogLevel, message: string, ...args: any[]) {
     // Check if the log level is greater than or equal to the minimum log level
-    if (level < this._minimumLogLevel) return;
+    if (level === LogLevel.None || level < this._minimumLogLevel) return;
 
     // Get the current timestamp
     const timestamp = this._getCurrentTimestamp();

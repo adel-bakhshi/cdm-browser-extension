@@ -7,6 +7,7 @@ enum LogLevel {
   Success,
   Warning,
   Error,
+  None,
 }
 
 export default LogLevel;

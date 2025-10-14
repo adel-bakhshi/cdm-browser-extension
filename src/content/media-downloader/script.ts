@@ -1,9 +1,10 @@
+import LogLevel from "../../utils/enums/log-level";
 import Logger from "../../utils/logger";
 import MediaFinder from "./media-finder";
 import PopupManager from "./popup-manager";
 
 // Create a new instance of the Logger class
-const mediaPopupLogger = new Logger("Media Popup");
+const mediaPopupLogger = new Logger("Media Popup", LogLevel.Warning);
 
 // Define required variables
 let popupManager: PopupManager;
