@@ -2,7 +2,7 @@
 
 <!-- Logo -->
 <p align="center">
-    <img src="./public/icon-512.png" alt="Logo" width="256"/>
+    <img src="./assets/icons/icon-512.png" alt="Logo" width="256"/>
 </p>
 
 **Effortlessly capture download links directly from Google Chrome, Firefox, and other Chromium-Based Browsers with the Cross Platform Download Manager.** 💻🌐
