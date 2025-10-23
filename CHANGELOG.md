@@ -1,3 +1,10 @@
+## [0.7.0] - 2025-10-23
+
+### Changed
+
+- Improved file downloading. If CDM is unable to download a file, the download will start in the browser instead.
+- Better protocol validation before sending links to CDM
+
 ## [0.6.1] - 2025-10-12
 
 ### Fixed

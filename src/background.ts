@@ -17,7 +17,9 @@ import type { DownloadData } from "./models/download-data";
 const globalLogger = new Logger("Service Worker");
 
 // Track captured downloads to prevent duplicate processing.
-const capturedDownloads = new Set();
+const capturedDownloads = new Set<number>();
+// Track ignored downloads to prevent failure processing.
+const ignoredDownloads = new Set<string>();
 
 // Get the current browser name.
 const browserType = await utils.detectBrowser();
@@ -187,6 +189,23 @@ async function handleDownload(downloadItem: chrome.downloads.DownloadItem, sugge
     // Make sure the extension is enabled
     if (!appSettings.isEnabled()) return;
 
+    // Get download item url
+    const downloadItemUrl = downloadItem.finalUrl ?? downloadItem.url;
+    // Log download item url
+    globalLogger.logDebug(`Download item url: ${downloadItemUrl ?? "Unknown"}`);
+
+    // Check if the download is ignored
+    if (ignoredDownloads.has(downloadItem.finalUrl) || ignoredDownloads.has(downloadItem.url)) {
+      globalLogger.logDebug("Ignoring download...");
+      return;
+    }
+
+    // Check if the download url is a blob
+    if (utils.isUnsupportedProtocol(downloadItemUrl)) {
+      globalLogger.logDebug("CDM does not support this protocol. Allowing download in browser...");
+      return;
+    }
+
     // Get file extension using multiple detection methods
     const fileExtension = getFileExtension(downloadItem);
     // Check if the file extension is supported by CDM
@@ -266,6 +285,7 @@ async function getDownloadData(downloadItem: chrome.downloads.DownloadItem): Pro
     url: downloadUrl,
     referer,
     pageAddress,
+    isBrowserNative: true,
   };
 }
 
@@ -284,6 +304,8 @@ async function downloadFile(data: DownloadData[]) {
     // Make sure that no error occurred
     if (!response.isSuccessful) {
       globalLogger.logInfo(response.message ?? "Failed to download file.");
+      // Ignore download and start in browser if the error is related to the CDM desktop application.
+      ignoreDownloadsAndStartInBrowser(data);
       return;
     }
 
@@ -356,6 +378,7 @@ async function handleMessages(message: any, sender: any, sendResponse: any) {
           url: message.url,
           referer: tabUrl,
           pageAddress: tabUrl,
+          isBrowserNative: false,
         };
 
         // Download the file
@@ -386,6 +409,7 @@ async function handleSingleItemContextMenuClick(info: any, tab: any) {
       url: "",
       referer: tab.url,
       pageAddress: tab.url,
+      isBrowserNative: false,
     };
 
     if (info.mediaType) {
@@ -446,6 +470,7 @@ async function handleMultipleItemsContextMenuClick(info: any, tab: any) {
           url: link,
           referer: tab.url,
           pageAddress: tab.url,
+          isBrowserNative: false,
         };
       });
 
@@ -734,6 +759,30 @@ async function downloadLatestVersion(latestVersion: string) {
     });
   } catch (e) {
     globalLogger.logError("Error downloading the latest version:", e);
+  }
+}
+
+/**
+ * Ignores downloads that are failed in CDM and start them in the browser.
+ * @param downloadItems - The download items to check.
+ * @returns A promise that resolves when the downloads are ignored and started in the browser.
+ */
+async function ignoreDownloadsAndStartInBrowser(downloadItems: DownloadData[]) {
+  // Filter out downloads that are browser native
+  const nativeBrowserDownloads = downloadItems.filter((item) => item.isBrowserNative);
+  // If there are no native browser downloads, return immediately
+  if (nativeBrowserDownloads.length === 0) return;
+
+  globalLogger.logInfo(
+    "Ignoring downloads and starting them in the browser...",
+    nativeBrowserDownloads.map((item) => item.url)
+  );
+
+  for (const downloadItem of nativeBrowserDownloads) {
+    // Add download files to ignored downloads
+    ignoredDownloads.add(downloadItem.url);
+    // Open the download in the browser
+    await chrome.tabs.create({ url: downloadItem.url });
   }
 }
 

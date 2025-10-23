@@ -88,4 +88,27 @@ function truncateString(str: string, maxLength: number) {
   return str.substring(0, maxLength) + "...";
 }
 
-export { detectBrowser, runWithDelayAsync, runWithDelay, isValidUrl, truncateString };
+/**
+ * Checks if an URL has an unsupported protocol.
+ * @param url - The URL to check.
+ * @returns True if the URL has an unsupported protocol.
+ */
+function isUnsupportedProtocol(url: string): boolean {
+  const unsupportedProtocols = [
+    "blob:",
+    "data:",
+    "mailto:",
+    "tel:",
+    "sms:",
+    "file:",
+    "ftp:",
+    "chrome:",
+    "edge:",
+    "about:",
+    "javascript:",
+  ];
+
+  return unsupportedProtocols.some((protocol) => url.startsWith(protocol));
+}
+
+export { detectBrowser, runWithDelayAsync, runWithDelay, isValidUrl, truncateString, isUnsupportedProtocol };
