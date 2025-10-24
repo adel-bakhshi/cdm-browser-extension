@@ -285,6 +285,7 @@ async function getDownloadData(downloadItem: chrome.downloads.DownloadItem): Pro
     url: downloadUrl,
     referer,
     pageAddress,
+    description: null,
     isBrowserNative: true,
   };
 }
@@ -378,6 +379,7 @@ async function handleMessages(message: any, sender: any, sendResponse: any) {
           url: message.url,
           referer: tabUrl,
           pageAddress: tabUrl,
+          description: null,
           isBrowserNative: false,
         };
 
@@ -409,6 +411,7 @@ async function handleSingleItemContextMenuClick(info: any, tab: any) {
       url: "",
       referer: tab.url,
       pageAddress: tab.url,
+      description: null,
       isBrowserNative: false,
     };
 
@@ -443,6 +446,9 @@ async function handleSingleItemContextMenuClick(info: any, tab: any) {
       return;
     }
 
+    // Get the description of the url
+    data.description = await getLinkDescriptionFromPage(tab.id, data.url);
+
     // Download the file
     await downloadFile([data]);
   } catch (error) {
@@ -470,9 +476,15 @@ async function handleMultipleItemsContextMenuClick(info: any, tab: any) {
           url: link,
           referer: tab.url,
           pageAddress: tab.url,
+          description: null,
           isBrowserNative: false,
         };
       });
+
+      // Get the description of the links
+      for (const data of result) {
+        data.description = await getLinkDescriptionFromPage(tab.id, data.url);
+      }
 
       // Download the files
       await downloadFile(result);
@@ -529,6 +541,60 @@ async function extractLinksFromSelection(tabId: number, selectionText: string): 
   } catch (error) {
     globalLogger.logError("Error extracting links:", error);
     return [];
+  }
+}
+
+/**
+ * Gets the description of a link from the page.
+ * @param tabId - The ID of the current tab.
+ * @param url - The URL of the link.
+ * @returns The description of the link, or null if not found.
+ */
+async function getLinkDescriptionFromPage(tabId: number, url: string): Promise<string | null> {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      args: [url],
+      func: (matchedUrl: string) => {
+        function findElementByUrl() {
+          // Searching for <a> tags
+          const anchors = document.querySelectorAll<HTMLAnchorElement>("a[href]");
+          for (const a of anchors) {
+            // Check if the href attribute matches the matchedUrl
+            if (a.href === matchedUrl) {
+              return a.innerText?.trim() || a.getAttribute("title") || a.getAttribute("aria-label");
+            }
+          }
+
+          // Searching for <img> tags
+          const images = document.querySelectorAll<HTMLImageElement>("img[src]");
+          for (const img of images) {
+            // Check if the src attribute matches the matchedUrl
+            if (img.src === matchedUrl) {
+              return img.getAttribute("alt") || img.getAttribute("title");
+            }
+          }
+
+          // Searching for <video> and <audio> tags
+          const medias = document.querySelectorAll<HTMLVideoElement | HTMLAudioElement>("video[src], audio[src]");
+          for (const media of medias) {
+            // Check if the src attribute matches the matchedUrl
+            if (media.src === matchedUrl) {
+              return media.getAttribute("title") || media.getAttribute("aria-label");
+            }
+          }
+
+          return null;
+        }
+
+        return findElementByUrl();
+      },
+    });
+
+    return results[0].result ?? null;
+  } catch (e) {
+    globalLogger.logError("Failed to fetch link description:", e);
+    return null;
   }
 }
 
