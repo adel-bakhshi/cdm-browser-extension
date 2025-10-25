@@ -1,3 +1,9 @@
+## [0.7.1] - 2025-10-25
+
+### Added
+
+- Automatically added description, referer, and page address to the downloaded file for better file management in CDM
+
 ## [0.7.0] - 2025-10-23
 
 ### Changed

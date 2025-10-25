@@ -281,11 +281,17 @@ async function getDownloadData(downloadItem: chrome.downloads.DownloadItem): Pro
   const activeTab = await getActiveTab();
   const pageAddress = activeTab?.url ?? null;
 
+  // Get the description of the link from the page
+  let description = await getLinkDescriptionFromPage(activeTab?.id ?? 0, downloadItem.url);
+  if (!description) {
+    description = await getLinkDescriptionFromPage(activeTab?.id ?? 0, downloadItem.finalUrl);
+  }
+
   return {
     url: downloadUrl,
     referer,
     pageAddress,
-    description: null,
+    description,
     isBrowserNative: true,
   };
 }
